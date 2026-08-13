@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="local.build.props" Condition="Exists('local.build.props')" />
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ScheduleIArcade</AssemblyName>
+    <RootNamespace>ScheduleIArcade</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <Il2CppAssembliesPath Condition="'$(Il2CppAssembliesPath)' == '' and '$(ScheduleIGameDir)' != ''">$(ScheduleIGameDir)\MelonLoader\Il2CppAssemblies</Il2CppAssembliesPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="S1API.Forked" Version="3.1.12" />
+    <PackageReference Include="LavaGang.MelonLoader" Version="0.7.3" PrivateAssets="all" NoWarn="NU1701" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Il2CppAssembliesPath)' != ''">
+    <Reference Include="UnityEngine"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AssetBundleModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.AssetBundleModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

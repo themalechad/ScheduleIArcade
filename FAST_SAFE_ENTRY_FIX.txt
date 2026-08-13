@@ -1,0 +1,13 @@
+Schedule I Arcade M2.6 - Fast + Safe Entry Fix
+
+Changes:
+- Reduced the custom Enter Arcade fallback delay from 8.25 seconds to 0.75 seconds.
+- If the vanilla NPC summon menu opens first, Enter Arcade is still injected there.
+- If the vanilla NPC menu opens later, the fallback hands off to the vanilla menu.
+- Procedural arcade no longer uses the old Y=300 sky position for actual entry.
+- On first entry it relocates to a pocket position 2500 units away horizontally while keeping the same Y elevation as the real Arcade entrance.
+- Calls Physics.SyncTransforms() before teleport so moved floor colliders are active before the player arrives.
+- Main floor is now 2 units thick and a second safety floor is placed underneath.
+- Spawn/exit markers are raised to 1.25 units above the floor.
+- Added an inside-arcade fall rescue check that returns the player to ARCADE_SPAWN if they drop more than 4 units below it.
+- Version: 0.2.6-fast-safe-entry

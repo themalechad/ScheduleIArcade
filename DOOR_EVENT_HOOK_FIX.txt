@@ -1,0 +1,23 @@
+SCHEDULE I ARCADE 0.2.0 - VANILLA DOOR EVENT HOOK
+
+Why M1.9 did not show Enter Arcade:
+- It watched Input.GetKeyDown(E) and then guessed which StaticDoor the player meant.
+- Schedule I's interaction system can invoke door interactions through its own InteractableObject/input path,
+  so a real knock can occur without our raw E check seeing it.
+
+0.2.0 changes:
+- Harmony hooks the game's actual StaticDoor.Interacted callback.
+- Also hooks Building.Doors.DoorKnocker.Knock as a compatibility path.
+- No global scene scans and no recurring door scans.
+- When the real door callback fires, the exact interacted door is captured.
+- If NPCSummonMenu opens, Enter Arcade is cloned into that native menu.
+- If no NPC menu appears after 0.45 seconds, a small Enter Arcade / Cancel choice appears.
+- Exterior return position is captured from the player's exact location at the door.
+
+Expected log lines after knocking on the Arcade door:
+  Installed 2 event-driven vanilla Arcade door interaction hook(s).
+  Bound vanilla Arcade entrance: ...
+  Vanilla Arcade door interaction detected; preparing Enter Arcade choice.
+
+If the current game build only exposes DoorKnocker:
+  Arcade door knock detected; showing Enter Arcade choice.

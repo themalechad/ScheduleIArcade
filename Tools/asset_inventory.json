@@ -1,0 +1,14 @@
+{
+  "fbx_version": 7400,
+  "source_application": "3ds Max 2018",
+  "models": [
+    {"name":"Enviorment","vertices":929,"material":"02 - Default"},
+    {"name":"Pinball Machine","vertices":2716,"material":"03 - Default"},
+    {"name":"Arcade Machine","vertices":958,"material":"08 - Default"},
+    {"name":"Table Top","vertices":910,"material":"13 - Default"},
+    {"name":"Crane Game","vertices":481,"material":"15 - Default"},
+    {"name":"Air Hockey","vertices":935,"material":"19 - Default"},
+    {"name":"Vendind Machine","vertices":914,"material":"20 - Default"}
+  ],
+  "texture_count": 27
+}

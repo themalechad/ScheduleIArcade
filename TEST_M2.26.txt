@@ -1,0 +1,22 @@
+Schedule I Arcade M2.26 - native Grid hierarchy placement fix
+
+WHY M2.25 STILL CRASHED
+Schedule I GridItem.InitializeGridItem uses GetProperty(grid.transform).PropertyCode.
+M2.25 correctly populated Grid.ParentProperty during Awake, but then reparented the Grid
+under the synthetic arcade room. The cached property still looked valid in logs, while the
+vanilla hierarchy lookup returned null during final placement.
+
+M2.26 FIX
+- Keeps the arcade Grid proxy parented under the real owned Property permanently.
+- Moves the proxy into the arcade using world position/rotation only.
+- Rebinds cloned Tile.OwnerGrid references to the cloned Grid.
+- Refreshes native coordinate lookup/size data after positioning.
+- Keeps wall Surface proxies under the owned Property hierarchy as well.
+
+TEST
+1. Enter the arcade.
+2. Spawn/equip a TV.
+3. Move it onto the checkerboard floor until the ghost becomes valid.
+4. Place it.
+5. Placement should complete without GridItem.InitializeGridItem NullReferenceException.
+6. Confirm the placed TV stays in the arcade and can be interacted with.

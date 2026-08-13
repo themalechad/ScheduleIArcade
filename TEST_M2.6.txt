@@ -1,0 +1,22 @@
+M2.6 TEST
+
+1. Run BUILD_AND_INSTALL.cmd.
+2. Start Schedule I and load the world.
+3. Go to the Northtown Arcade front door.
+4. Knock/interact once.
+5. Enter Arcade should become available in about 0.75 seconds if the native NPC menu has not already opened.
+6. Click Enter Arcade.
+7. Confirm you appear standing on the arcade interior floor, NOT high in the sky.
+8. Walk around for several seconds and confirm you do not fall through.
+9. Test [E] Play Arcade on a cabinet.
+10. Press ESC to stop the game.
+11. Use [E] Exit Arcade and confirm you return outside the original Arcade door.
+
+Useful expected logs:
+- Bound vanilla Arcade entrance: building='Arcade' ...
+- Showing fast mouse-selectable Enter Arcade choice ...
+- Procedural arcade anchored at safe same-elevation pocket position (...)
+- Entered the custom arcade at safe spawn (...)
+
+If the safety fallback ever triggers, the log will say:
+- Arcade safety spawn caught an invalid/falling player position ...

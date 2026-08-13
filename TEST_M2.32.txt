@@ -1,0 +1,16 @@
+Schedule I Arcade M2.32 - Exact Footprint + Property Spam Fix
+
+Fixes
+- Imported arcade assets are vertex-warped into a five-sided footprint matching the real Northtown Arcade roof: rectangular south/east sides, shortened north wall, and the large north-west diagonal/chamfer.
+- Checkerboard floor is now a five-sided mesh instead of a rectangle.
+- Generated west/north walls follow the same chamfered outline.
+- Removed the synthetic Schedule I Property proxy entirely. It was being inserted into Property.Properties/OwnedProperties without all vanilla business/property references, which broke PropertyManager.GetNearestProperty, Player.RecalculateCurrentProperty, and ManagementWorldspaceCanvas every frame.
+- Building now uses a real owned Property only as the vanilla initialization template, while the arcade keeps its own stable Grid GUID.
+- Placed arcade GridItems are immediately removed from the template property's BuildableItems culling list, un-culled, and kept under the arcade room so TVs do not inherit remote-property visibility culling.
+- Ambience changes from M2.31 are preserved.
+
+Test
+1. Build/install. Before entering the arcade, confirm GetNearestProperty/RecalculateCurrentProperty/ManagementWorldspaceCanvas NullReference spam is gone.
+2. Enter the arcade and fly above it. Confirm the north-west corner is diagonal, matching the real building outline.
+3. Confirm ambience starts inside.
+4. Place a TV and confirm it remains visible.

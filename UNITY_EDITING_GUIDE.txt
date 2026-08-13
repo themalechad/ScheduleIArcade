@@ -1,0 +1,38 @@
+SCHEDULE I ARCADE - EDIT THE ROOM YOURSELF IN UNITY
+
+1. Create/open a normal Unity 3D project. Using the same Unity editor version as Schedule I is preferred when you know it.
+2. Copy the CONTENTS of this package's UnityAssetsToCopy/Assets folder into your Unity project's Assets folder.
+3. Wait for Unity to import arcade.fbx and the textures.
+4. In Unity's top menu choose:
+      Schedule I Arcade > 1 - Prepare Arcade Room
+5. Double-click:
+      Assets/ScheduleIArcade/Generated/ArcadeRoom.prefab
+   to open it in Prefab Mode.
+
+The prefab contains editor-only colored layout guides:
+- RED_DOOR_TARGET = door location
+- GREEN_PINBALL_ROW = pinball row
+- ORANGE_ARCADE_CABINETS = upright cabinet area
+- BLUE_PACMAN = Pac-Man cocktail-table area
+
+You can drag/rotate the real FBX objects directly in the Scene view. The generated double door is named:
+      ARCADE_DOUBLE_DOOR_EDIT_ME
+
+Important runtime markers:
+- ARCADE_SPAWN: where the player's feet appear after entering. Keep this just inside the door.
+- ARCADE_EXIT: where the [E] Exit Arcade prompt is detected. Keep it near the inside face of the same door.
+- ARCADE_CABINET_01 / ARCADE_SCREEN_01: the current playable cabinet and its runtime screen quad.
+
+The red/green/orange/blue guides are editor-only and the build script strips them from the shipped bundle.
+
+When finished:
+6. Save the prefab.
+7. Choose:
+      Schedule I Arcade > 2 - Build Windows AssetBundle
+8. Unity creates:
+      ArcadeAssetBundleOutput/scheduleiarcade
+9. Copy that file into the game at:
+      Mods/ScheduleIArcade/Assets/scheduleiarcade
+10. Start Schedule I. The mod prefers your AssetBundle over the raw FBX fallback, so your Unity-edited room becomes the arcade interior.
+
+If you want to return to the packaged raw room, remove/rename Mods/ScheduleIArcade/Assets/scheduleiarcade.

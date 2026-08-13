@@ -1,0 +1,16 @@
+Schedule I Arcade M2.7 Repeat-Entry Test
+
+1. Run BUILD_AND_INSTALL.cmd.
+2. Load the game and go to the vanilla Arcade door in Northtown.
+3. Knock and choose Enter Arcade.
+4. Stay inside at least 10 seconds so the old vanilla 8-second knock coroutine has time to finish.
+5. Use Exit Arcade.
+6. Knock on the same vanilla Arcade door again.
+7. Confirm the Enter Arcade choice appears again.
+8. Repeat steps 3-7 at least three times.
+
+Expected log after exit:
+Exited the custom arcade and re-armed the vanilla Arcade door for another knock.
+
+With DebugLogs enabled, a delayed menu may also log:
+Closed delayed vanilla NPC summon menu from the previous Arcade knock.

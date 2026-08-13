@@ -1,0 +1,18 @@
+Schedule I Arcade M2.40 - full wall-to-wall placement grid
+
+1. Enter the arcade and check the log for:
+   - version 0.2.40-full-wall-grid
+   - perimeterAdded=80
+   - coverage approximately 8.0m x 8.0m
+   - 6 wall Surface proxies
+2. Equip a floor-standing TV/table/cabinet and test placement against:
+   - south wall
+   - east wall
+   - north wall
+   - west wall
+   - both sides of the chamfer doorway
+3. At each wall, verify the object stays green until its back is visually flush with the wall.
+4. Verify placed feet sit directly on the checkerboard without a visible gap or floating.
+5. Test a true wall-mounted item on every wall face; it should snap flush from near floor height up
+   to the crown trim.
+6. Confirm the doorway opening remains excluded and no item can be placed through a physical wall.

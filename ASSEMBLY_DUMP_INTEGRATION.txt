@@ -1,0 +1,24 @@
+Schedule I Arcade 0.2.1 - Assembly Dump Integration
+=====================================================
+
+This build was updated against the user's current Assembly-CSharp dump.
+
+Verified game-side members:
+- ScheduleOne.Interaction.InteractableObject.StartInteract()
+- ScheduleOne.Doors.StaticDoor.Interacted()
+- ScheduleOne.Doors.StaticDoor.Knock()
+- ScheduleOne.Doors.StaticDoor.IntObj
+- ScheduleOne.Doors.StaticDoor.AccessPoint
+- ScheduleOne.Doors.StaticDoor.Building
+- ScheduleOne.Map.NPCEnterableBuilding.BuildingName
+- ScheduleOne.UI.NPCSummonMenu.Open(List<NPC>, Action<NPC>)
+- ScheduleOne.UI.NPCSummonMenu.EntryContainer / Entries / IsOpen / Close()
+- ScheduleOne.Building.Doors.DoorKnocker.Knock()
+
+Important: there is no Arcade-specific C# type or "Arcade" class in the dump. The actual arcade identity is serialized scene/prefab data. Therefore this build captures the exact runtime door interaction and logs its BuildingName/hierarchy so the final binding can be made exact without recurring scene scans.
+
+Performance policy:
+- no world-wide recurring scans
+- no periodic StaticDoor enumeration
+- no per-frame MonoBehaviour discovery
+- event-driven interaction hooks only

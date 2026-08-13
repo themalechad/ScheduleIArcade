@@ -1,0 +1,13 @@
+Schedule I Arcade M1.8 PERFORMANCE FIX
+
+Fixes the severe stutter seen in M1.6.
+
+- Removed recurring scene-wide StaticDoor scans.
+- Removed per-frame scene-wide NPCSummonMenu scans.
+- Door discovery now happens only when the player presses E near/at a door.
+- Nearby fallback uses Physics.OverlapSphere and only inspects nearby collider parents.
+- NPCSummonMenu lookup is targeted and one-shot, with one retry on actual door interaction.
+- Missing AssetBundle is checked/logged once instead of twice.
+- DebugLogs now defaults false for fresh configs. Existing MelonPreferences may retain your previous value.
+
+Expected idle behavior: no repeated 'Could not identify vanilla Arcade StaticDoor' messages and no recurring global scans.

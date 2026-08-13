@@ -1,0 +1,6 @@
+IMPORTANT BEFORE A NEXUS RELEASE
+
+The FBX and textures in this working project came from the model archive supplied by the user.
+Before redistributing them publicly, verify the original model/scene license explicitly permits redistribution inside a game mod.
+
+Do not publish these source assets to Nexus until that license is confirmed.

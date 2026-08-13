@@ -1,0 +1,8 @@
+Schedule I Arcade M2.12 - Collision Unwedge Fix
+
+Changes:
+- Removed the triangle MeshCollider from the combined Environment mesh. Decorative environment geometry can no longer wedge the player in the center walking area.
+- Added simple continuous collision for the existing south/east room shell while preserving the real gray exit-door opening.
+- Kept the generated west/north walls and expanded floor seams from M2.11.
+- Inset prop BoxCollider footprints by 10 cm on each horizontal side to give the player more clearance between tightly packed machines.
+- Visual meshes and textures are unchanged; only collision geometry was simplified.

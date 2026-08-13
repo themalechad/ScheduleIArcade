@@ -1,0 +1,14 @@
+# Recreated by Tools/Build-And-Install.ps1; the distributable runtime assets in dist/ are tracked.
+Build/
+**/bin/
+**/obj/
+
+# Local editor/cache files.
+.vs/
+*.user
+*.suo
+*.tmp
+*.blend1
+*.blend2
+__pycache__/
+*.py[cod]

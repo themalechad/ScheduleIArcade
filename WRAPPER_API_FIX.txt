@@ -1,0 +1,14 @@
+Schedule I Arcade M2.5 - generated IL2CPP wrapper API fix
+
+Fixed compile errors:
+- PlayerCamera.canLook is not exposed by the generated MelonLoader 0.7.3 IL2CPP wrapper.
+- PlayerCamera.activeUIElementCount is not exposed by the generated wrapper.
+
+The code now uses only wrapper methods already known to compile:
+- SetCanLook(bool)
+- FreeMouse()
+- LockMouse()
+- AddActiveUIElement(string)
+- RemoveActiveUIElement(string)
+
+When the fallback Enter Arcade modal closes, camera look is restored to true and the cursor is restored from the state captured before opening the modal.

@@ -1,0 +1,19 @@
+Schedule I Arcade M2.36 - Annotated Layout + Unity Editable Template
+
+Runtime layout
+- RED: double door on far-right portion of the north/back wall.
+- GREEN: pinball machines moved into a row along the north/back wall, left of the door.
+- ORANGE: upright arcade cabinet moved against the west/left wall.
+- BLUE: Pac-Man cocktail cabinet rotated 90 degrees and moved into the marked lane.
+- Air Hockey unique texture filenames remain fixed.
+- Ambience remains a 90-second looping cut with no fade.
+
+Unity editing
+- Copy UnityAssetsToCopy/Assets into a Unity project's Assets folder.
+- Use Schedule I Arcade > 1 - Prepare Arcade Room.
+- Open Assets/ScheduleIArcade/Generated/ArcadeRoom.prefab.
+- Red/green/orange/blue editor-only guides show the requested layout zones.
+- Move the actual FBX objects and ARCADE_DOUBLE_DOOR_EDIT_ME however you want.
+- Keep ARCADE_SPAWN just inside the entrance and ARCADE_EXIT at the inside face of the entrance.
+- Use Schedule I Arcade > 2 - Build Windows AssetBundle.
+- Copy ArcadeAssetBundleOutput/scheduleiarcade to Mods/ScheduleIArcade/Assets/scheduleiarcade.

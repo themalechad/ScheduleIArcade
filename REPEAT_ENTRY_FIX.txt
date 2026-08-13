@@ -1,0 +1,15 @@
+Schedule I Arcade M2.7 - Repeat Entry Fix
+
+Fixes:
+- The vanilla StaticDoor knock coroutine can finish after the fast custom Enter Arcade prompt has already teleported the player.
+- Any delayed NPCSummonMenu from the old knock is now closed while the player is inside the custom arcade.
+- Returning outside explicitly closes stale summon UI and re-arms the real Arcade StaticDoor / InteractableObject.
+- Door debounce and short post-exit suppression are reset so the player can knock again and get Enter Arcade again.
+
+Test:
+1. Knock on the vanilla Arcade door.
+2. Select Enter Arcade.
+3. Use the interior Exit Arcade interaction.
+4. Knock on the same exterior door again.
+5. Confirm Enter Arcade appears again.
+6. Repeat the loop at least 3 times.

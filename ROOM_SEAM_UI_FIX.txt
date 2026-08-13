@@ -1,0 +1,9 @@
+Schedule I Arcade M2.11 - Room Seam + Exit Prompt Fix
+
+Changes:
+- Raised the [E] Exit Arcade prompt ~100 pixels so it no longer sits on top of the hotbar.
+- Increased overlap of the two generated missing walls so their corners/ceiling edges close cleanly.
+- Added small textured, collidable floor extensions only along the west and north generated walls.
+- The floor extensions overlap the original FBX floor and continue under the wall fills, removing visible floor/wall gaps.
+- The real +X exit-door side is intentionally not expanded, so the visible door/exit layout stays unchanged.
+- Keeps all M2.10 IL2CPP-safe Transform.GetChild hierarchy traversal fixes.

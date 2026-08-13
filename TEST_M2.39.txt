@@ -1,0 +1,26 @@
+Schedule I Arcade M2.39 - screenshot correction pass
+
+LAYOUT
+1. Pac-Man is centered in the room, not parked against the west side.
+2. Four distinct pinball GameObjects form an evenly spaced one-by-one row on the west wall.
+3. Two distinct upright arcade GameObjects form an evenly spaced row on the south wall.
+4. Walk between Pac-Man, air hockey, and both wall rows; no cabinet overlaps or blocks the route.
+5. Test both upright cabinets. Each should have its own screen/collider and register independently.
+
+CEILING
+1. Look across the entire acoustic-tile ceiling.
+2. The two long imported hanging light bars are gone.
+3. The four generated bright rectangular light panels are gone.
+4. The room remains readable from invisible warm/red/white point lighting.
+
+EAST WALL / WINDOWS
+1. Inspect both original east-wall window areas and adjacent artwork.
+2. The oversized purple legacy-door fill must be completely absent.
+3. Original window/frame/art geometry must be visible again.
+4. Walk into the east wall to confirm the invisible collision shell still seals it.
+
+BUILD / EXPORT
+1. Run BUILD_AND_INSTALL.cmd.
+2. Confirm export reports four Pinball Machine rows, two Arcade Machine rows, Table Top, and Air
+   Hockey, followed by "LAYOUT QA PASSED".
+3. Confirm the game log reports version 0.2.39-split-layout-window-fix and raw package v2.

@@ -1,0 +1,24 @@
+Schedule I Arcade M2.37 - Chamfer Door + Blender Editing
+
+Runtime fallback layout:
+- RED: double-door opening is cut into the diagonal/chamfer wall.
+- GREEN: pinball pair is rotated 90 degrees and placed along the long wall.
+- ORANGE: upright playable arcade cabinet is placed against the pixel-art/south wall.
+- BLUE: Pac-Man cocktail table is moved left of center and kept clear of the entrance route.
+- All prop pivots are re-centered before movement/rotation.
+- Legacy single FBX door removal region is widened and replaced by purple wall fill.
+- Air Hockey continues to use uniquely named textures on Windows.
+- Existing 90-second no-fade ambience loop is preserved.
+
+Blender workflow:
+1. Install Blender (already done for this test).
+2. Double-click OPEN_ARCADE_IN_BLENDER.cmd.
+3. First run creates BlenderEditable/ScheduleIArcade_Editable.blend and opens it.
+4. Move/rotate the machine objects and save.
+5. Run BUILD_AND_INSTALL.cmd.
+6. Build should print: ==> Exporting Blender-authored arcade layout
+7. In game log should print: Loaded Blender-authored arcade prop transforms from raw scene package v2.
+
+Door editing in Blender:
+- Slide ARCADE_DOOR_TARGET along the diagonal wall.
+- Build exporter writes arcade_layout.txt and runtime clamps it to the safe chamfer range.

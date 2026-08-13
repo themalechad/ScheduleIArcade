@@ -1,0 +1,5 @@
+M2.34
+- moved generated double-door to the wall shown in the latest screenshot
+- covered the leftover single-door asset section more aggressively
+- replaced full ambience file with a short WAV cut derived from arcade83.mp3
+- arrival still preserves north-west-facing entry into the room

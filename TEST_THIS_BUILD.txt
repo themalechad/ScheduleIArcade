@@ -1,0 +1,10 @@
+SCHEDULE I ARCADE M2.42 - INTERACTIVE TV + MOVABLE MACHINES
+
+See TEST_M2.42.txt for the complete focused test flow.
+
+Quick check:
+1. Enter the arcade.
+2. Press F while aiming at each visible machine; confirm a named x1 HUD slot and full-model ghost.
+3. Place with left click, rotate with Q/E, and cancel with right click or Escape.
+4. Press E on the Arcade TV and play Pong or Snake.
+5. Confirm building placement, cabinet screens, doors, and exit still work.

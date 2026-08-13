@@ -1,0 +1,7 @@
+Schedule I Arcade M2.2 - MelonLoader 0.7.3 Harmony compile fix
+
+Fixes:
+- CS0118: 'Harmony' is a namespace but is used like a type.
+- Uses fully-qualified Harmony 2 API names (global::HarmonyLib.*).
+- Build script no longer adds legacy Harmony.dll when collecting MelonLoader references; it uses 0Harmony.dll used by MelonLoader 0.7.3.
+- Keeps the M2.1 event-driven entrance hooks and M1.7+ performance fixes.

@@ -1,0 +1,40 @@
+Schedule I Arcade M2.43 - TV modal, native placement grid, and layout corrections
+
+Expected startup/log state
+1. Confirm MelonLoader reports version 0.2.43-tv-grid-layout-fixes.
+2. Enter the arcade and check for:
+   - Pre-placed interactive Arcade TV flush against north wall: Pong + Snake
+   - Arcade floor building enabled using native owned Grid ... perimeterAdded=...
+   - Custom arcade furniture initialized: 9 movable cabinet/machine asset(s)
+3. There must be no repeating "Method unstripping failed" / OnGUI errors in Latest.log.
+
+Custom machine pickup regression
+1. Aim at the Arcade TV and press F. Keep it held for at least 10 seconds.
+2. Confirm the furniture HUD/ghost remain responsive and Latest.log stays free of repeated errors.
+3. Right-click/Escape to cancel, then repeat with an upright cabinet and a pinball machine.
+
+Interactive TV modal
+1. Stand in front of the custom TV. Its attract/menu text must read normally, not backwards.
+2. Press E. Confirm the camera moves in to frame the TV screen, the hotbar is hidden, and the
+   player cannot walk or look away.
+3. Press Tab: the phone must not open; the TV returns to its Pong/Snake menu instead.
+4. Try number keys and ordinary game hotkeys: they must not change the hotbar or trigger gameplay.
+5. Use arrows + Enter to select Pong/Snake. Confirm arrows operate the TV game.
+6. Press Escape. Confirm camera, movement/look, phone access and hotbar return, and the TV restores
+   its attract screen.
+
+Vanilla furniture grid
+1. Select a normal floor-standing vanilla item, such as the game TV, while inside the arcade.
+2. Move its ghost over centre floor, then against each straight wall and the chamfer wall.
+3. On every native arcade tile the ghost must become placeable (not permanently red) and it must
+   place using the normal vanilla flow.
+4. Confirm an item placed on the arcade grid remains visible after walking around and after leaving
+   and re-entering the arcade.
+
+Layout / visual pass
+1. All four pinball backs are flush toward the west wall; their play fields face into the room.
+2. Both stand-up cabinet screens and their helper display quads face the player from the south row.
+3. The Street Fighter mural remains normally oriented. Its physical door is on the right/south end
+   of that wall, without covering a window or introducing a hole.
+4. Ceiling has no long hanging fluorescent bars. The checkerboard floor, wall/roof surfaces, trim,
+   and five-sided collision shell remain continuous with no visible gaps.

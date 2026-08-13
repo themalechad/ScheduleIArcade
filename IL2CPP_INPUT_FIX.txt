@@ -1,0 +1,7 @@
+Schedule I Arcade M2.4 - IL2CPP input fix
+
+- Fixes CS0117 for Player.Deactivate/Activate.
+- Uses PlayerMovement.Instance.CanMove / CanJump instead.
+- Uses PlayerCamera active UI registration + SetCanLook + FreeMouse.
+- Preserves/restores prior movement, camera-look and cursor state.
+- Keeps MelonLoader 0.7.3 target and event-driven Arcade door hooks.

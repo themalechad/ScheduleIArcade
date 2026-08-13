@@ -1,0 +1,7 @@
+After building in Unity, copy the generated file named:
+
+scheduleiarcade
+
+to:
+
+Schedule I\Mods\ScheduleIArcade\Assets\scheduleiarcade
