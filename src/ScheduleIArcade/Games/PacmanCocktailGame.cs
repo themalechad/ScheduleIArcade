@@ -1,4 +1,6 @@
 using UnityEngine;
+using MelonLoader;
+using ScheduleIArcade.Core;
 
 namespace ScheduleIArcade.Games;
 
@@ -58,8 +60,14 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     private readonly HashSet<Vector2Int> _powerPellets = new();
     private readonly List<Ghost> _ghosts = new();
     private readonly System.Random _random = new();
+    private readonly List<Texture2D> _suppliedArt = new();
 
     private Texture2D? _texture;
+    private Texture2D? _sourceTitle;
+    private Texture2D? _sourcePellet;
+    private Texture2D? _sourcePowerPellet;
+    private readonly Texture2D?[] _sourcePacmanSprites = new Texture2D?[3];
+    private readonly Texture2D?[] _sourceGhostSprites = new Texture2D?[4];
     private Color32[]? _pixels;
     private Vector2Int _player;
     private Vector2Int _playerDirection;
@@ -90,6 +98,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             wrapMode = TextureWrapMode.Clamp
         };
         _pixels = new Color32[Width * Height];
+        LoadSuppliedPacmanVisuals();
         BuildMaze();
         DrawFrame();
     }
@@ -356,13 +365,69 @@ internal sealed class PacmanCocktailGame : IArcadeGame
 
     private static readonly Vector2Int[] Directions = { Vector2Int.left, Vector2Int.right, Vector2Int.up, Vector2Int.down };
 
+    private void LoadSuppliedPacmanVisuals()
+    {
+        // These are extracted directly from the user's PacMan v1.1.1 resources/sharedassets
+        // files. Its managed Mono DLL cannot run in Schedule I's IL2CPP process, but its PNG
+        // art is fully compatible and is deliberately used by the in-table game renderer.
+        _sourceTitle = LoadSuppliedArt("pacman_title.png");
+        _sourcePacmanSprites[0] = LoadSuppliedArt("pacman_chomp_1.png");
+        _sourcePacmanSprites[1] = LoadSuppliedArt("pacman_chomp_2.png");
+        _sourcePacmanSprites[2] = LoadSuppliedArt("pacman_chomp_3.png");
+        _sourceGhostSprites[0] = LoadSuppliedArt("blinky_right_1.png");
+        _sourceGhostSprites[1] = LoadSuppliedArt("pinky_right_1.png");
+        _sourceGhostSprites[2] = LoadSuppliedArt("inky_right_1.png");
+        _sourceGhostSprites[3] = LoadSuppliedArt("clyde_right_1.png");
+        _sourcePellet = LoadSuppliedArt("pelletFixed.png");
+        _sourcePowerPellet = LoadSuppliedArt("pellet_energizerFixed.png");
+
+        if (_sourcePacmanSprites[0] != null && _sourceGhostSprites[0] != null)
+            MelonLogger.Msg("Pac-Man cocktail table loaded sprites and pellet art from the supplied PacMan v1.1.1 files.");
+        else
+            MelonLogger.Warning("Pac-Man source visual assets were not installed; using the compatible built-in pixel fallback.");
+    }
+
+    private Texture2D? LoadSuppliedArt(string fileName)
+    {
+        string path = Path.Combine(ModPaths.PacManAssetsRoot, fileName);
+        if (!File.Exists(path))
+            return null;
+
+        try
+        {
+            var art = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+            {
+                name = "ScheduleIArcade_SourcePacMan_" + Path.GetFileNameWithoutExtension(fileName),
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            if (!ImageConversion.LoadImage(art, File.ReadAllBytes(path), false))
+            {
+                UnityEngine.Object.Destroy(art);
+                return null;
+            }
+            _suppliedArt.Add(art);
+            return art;
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"Could not load supplied Pac-Man art '{fileName}': {ex.Message}");
+            return null;
+        }
+    }
+
     private void DrawFrame()
     {
         if (_texture == null || _pixels == null)
             return;
 
         Clear(Black);
-        DrawTextCentered("PAC-MAN", 234, 2, Yellow);
+        // The supplied title is a wide original marquee. Keep it compact so the active maze
+        // remains readable at cocktail-table range; the fallback still works if assets are absent.
+        if (_sourceTitle != null)
+            DrawSourceImage(_sourceTitle, 51, 230, 122, 14);
+        else
+            DrawTextCentered("PAC-MAN", 234, 2, Yellow);
         DrawText("SCORE " + _score.ToString("00000"), 9, 5, 1, White);
         DrawText("LIVES " + _lives, 142, 5, 1, White);
         DrawMaze();
@@ -405,11 +470,17 @@ internal sealed class PacmanCocktailGame : IArcadeGame
                 if (_powerPellets.Contains(point))
                 {
                     int pulse = (int)(Time.time * 5f) & 1;
-                    FillRect(px + 2 - pulse, py + 2 - pulse, 5 + pulse * 2, 5 + pulse * 2, White);
+                    if (_sourcePowerPellet != null)
+                        DrawSourceImage(_sourcePowerPellet, px + 2 - pulse, py + 2 - pulse, 5 + pulse * 2, 5 + pulse * 2);
+                    else
+                        FillRect(px + 2 - pulse, py + 2 - pulse, 5 + pulse * 2, 5 + pulse * 2, White);
                 }
                 else if (_pellets.Contains(point))
                 {
-                    FillRect(px + 4, py + 4, 2, 2, White);
+                    if (_sourcePellet != null)
+                        DrawSourceImage(_sourcePellet, px + 3, py + 3, 3, 3);
+                    else
+                        FillRect(px + 4, py + 4, 2, 2, White);
                 }
             }
         }
@@ -419,6 +490,13 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     {
         int cx = OriginX + _player.x * Cell + Cell / 2;
         int cy = OriginY + _player.y * Cell + Cell / 2;
+        Texture2D? sprite = _sourcePacmanSprites[(int)(Time.time * 10f) % _sourcePacmanSprites.Length];
+        if (sprite != null)
+        {
+            DrawSourceImage(sprite, cx - 4, cy - 4, 9, 9, _playerDirection == Vector2Int.left);
+            return;
+        }
+
         bool openMouth = ((int)(Time.time * 10f) & 1) == 0;
         for (int y = -4; y <= 4; y++)
         {
@@ -444,6 +522,12 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             int x = OriginX + ghost.Position.x * Cell + 1;
             int y = OriginY + ghost.Position.y * Cell + 1;
             Color32 color = _frightenedTimer > 0f ? Frightened : ghost.Color;
+            Texture2D? sprite = _sourceGhostSprites[i % _sourceGhostSprites.Length];
+            if (sprite != null && _frightenedTimer <= 0f)
+            {
+                DrawSourceImage(sprite, x, y, 8, 8);
+                continue;
+            }
             FillRect(x, y, 7, 6, color);
             FillRect(x + 1, y + 6, 2, 1, color);
             FillRect(x + 4, y + 6, 2, 1, color);
@@ -499,6 +583,29 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             _pixels[y * Width + x] = color;
     }
 
+    private void DrawSourceImage(Texture2D source, int x, int y, int drawWidth, int drawHeight, bool flipX = false)
+    {
+        if (_pixels == null || source == null || drawWidth <= 0 || drawHeight <= 0)
+            return;
+
+        Color32[] sourcePixels = source.GetPixels32();
+        int sourceWidth = source.width;
+        int sourceHeight = source.height;
+        for (int dy = 0; dy < drawHeight; dy++)
+        {
+            int sourceY = Mathf.Clamp(dy * sourceHeight / drawHeight, 0, sourceHeight - 1);
+            for (int dx = 0; dx < drawWidth; dx++)
+            {
+                int mappedX = flipX ? drawWidth - 1 - dx : dx;
+                int sourceX = Mathf.Clamp(mappedX * sourceWidth / drawWidth, 0, sourceWidth - 1);
+                Color32 color = sourcePixels[sourceY * sourceWidth + sourceX];
+                if (color.a < 16)
+                    continue;
+                SetPixel(x + dx, y + dy, color);
+            }
+        }
+    }
+
     private void DrawTextCentered(string text, int y, int scale, Color32 color)
         => DrawText(text, (Width - TextWidth(text, scale)) / 2, y, scale, color);
 
@@ -548,6 +655,17 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             _texture = null;
         }
         _pixels = null;
+        foreach (Texture2D art in _suppliedArt)
+        {
+            if (art != null)
+                UnityEngine.Object.Destroy(art);
+        }
+        _suppliedArt.Clear();
+        _sourceTitle = null;
+        _sourcePellet = null;
+        _sourcePowerPellet = null;
+        Array.Clear(_sourcePacmanSprites, 0, _sourcePacmanSprites.Length);
+        Array.Clear(_sourceGhostSprites, 0, _sourceGhostSprites.Length);
         _pellets.Clear();
         _powerPellets.Clear();
         _ghosts.Clear();

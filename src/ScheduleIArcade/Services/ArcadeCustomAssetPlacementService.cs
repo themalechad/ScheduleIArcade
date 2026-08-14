@@ -39,13 +39,14 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
         ("Air Hockey", "Air Hockey Table")
     };
 
-    private const float PickupDistance = 3.0f;
+    private const float PickupDistance = 2.35f;
     private const float GridSnap = 0.5f;
     private const float FloorY = 0.044f;
 
     private readonly ArcadeLocationService _location;
     private readonly Func<bool> _isInsideArcade;
     private readonly Func<bool> _isPlaying;
+    private readonly Func<bool> _isLookingAtCabinet;
     private readonly List<MovableAsset> _assets = new();
 
     private MovableAsset? _activeAsset;
@@ -60,6 +61,7 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
     // MelonLoader log while a machine is held. Tick is the safe game-update boundary, so cache
     // that state there and let OnGUI stay completely managed-only.
     private bool _insideArcade;
+    private bool _cabinetPromptActive;
     private bool _insideStateFailureLogged;
     private bool _carrying;
     private bool _validPlacement;
@@ -70,11 +72,13 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
     public ArcadeCustomAssetPlacementService(
         ArcadeLocationService location,
         Func<bool> isInsideArcade,
-        Func<bool> isPlaying)
+        Func<bool> isPlaying,
+        Func<bool> isLookingAtCabinet)
     {
         _location = location;
         _isInsideArcade = isInsideArcade;
         _isPlaying = isPlaying;
+        _isLookingAtCabinet = isLookingAtCabinet;
     }
 
     public void Tick()
@@ -109,11 +113,16 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
         _insideArcade = inside;
         if (!inside)
         {
+            _cabinetPromptActive = false;
             _lookedAtAsset = null;
             if (_carrying)
                 CancelPlacement();
             return;
         }
+
+        // Keep OnGUI entirely managed-only.  This callback only queries our cabinet service,
+        // but caching it here also preserves the no-IL2CPP-callback rule for the GUI boundary.
+        _cabinetPromptActive = _isLookingAtCabinet();
 
         if (_carrying)
         {
@@ -501,29 +510,34 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
 
         if (_lookedAtAsset != null && !_carrying)
         {
-            GUI.Box(
-                new Rect(Screen.width / 2f - 150f, Screen.height - 130f, 300f, 32f),
-                $"[F] Pick Up {_lookedAtAsset.DisplayName}");
+            // CabinetInteractionService owns the one combined play/move card for screen-bearing
+            // machines. Non-playable tables and pinballs still get this dedicated move prompt.
+            if (_cabinetPromptActive)
+                return;
+            ArcadePromptUi.DrawCard(
+                _lookedAtAsset.DisplayName.ToUpperInvariant(),
+                "PRESS [F]  PICK UP & MOVE",
+                "Close-range only — placement snaps flush to floors and walls.",
+                132f,
+                new Color(0.18f, 1.00f, 0.42f, 1f));
             return;
         }
 
         if (!_carrying || _activeAsset == null)
             return;
 
-        float slotX = Screen.width / 2f - 38f;
-        float slotY = Screen.height - 178f;
-        GUI.Box(new Rect(slotX, slotY, 76f, 76f), string.Empty);
-        // GUI.Box/Label are used by the game's own HUD and are safe in this IL2CPP build. The
-        // DrawTexture overload used here previously is the one that repeatedly threw
-        // "Method unstripping failed" while an item was carried, so the held slot intentionally
-        // uses a textual furniture marker instead of a dynamically-created texture icon.
-        GUI.Label(new Rect(slotX + 8f, slotY + 15f, 60f, 20f), "MACHINE");
-        GUI.Label(new Rect(slotX + 52f, slotY + 50f, 20f, 20f), "1");
-        GUI.Box(new Rect(Screen.width / 2f - 180f, slotY - 36f, 360f, 32f), $"Held item: {_activeAsset.DisplayName} x1");
-
-        string validity = _validPlacement ? "VALID - LEFT CLICK PLACE" : "BLOCKED - MOVE THE GHOST";
-        GUI.Box(new Rect(Screen.width / 2f - 190f, slotY - 70f, 380f, 30f), validity);
-        GUI.Box(new Rect(Screen.width / 2f - 230f, slotY + 80f, 460f, 30f), "Q / E rotate   |   Right Click / ESC cancel");
+        ArcadePromptUi.DrawCard(
+            "CARRYING  1 × " + _activeAsset.DisplayName.ToUpperInvariant(),
+            _validPlacement ? "GREEN GHOST — LEFT CLICK TO PLACE" : "RED GHOST — MOVE TO A CLEAR SPACE",
+            "The placement grid snaps the machine flush to the floor or nearby wall.",
+            220f,
+            _validPlacement ? new Color(0.18f, 1.00f, 0.42f, 1f) : new Color(1.00f, 0.20f, 0.28f, 1f));
+        ArcadePromptUi.DrawCard(
+            "PLACEMENT CONTROLS",
+            "[Q] / [E] ROTATE   •   RIGHT CLICK / ESC CANCEL",
+            "The held item remains tracked as one arcade machine.",
+            132f,
+            new Color(0.10f, 0.75f, 1.00f, 1f));
     }
 
     private void EnsureHudIcon()

@@ -43,11 +43,11 @@ internal sealed class ArcadeExitInteractionService
         if (!_nearExit || !_entrance.IsInsideArcade || _session.IsPlaying)
             return;
 
-        // Keep the prompt comfortably above Schedule I's hotbar/HUD so it remains readable
-        // at both 16:9 and ultrawide resolutions.
-        float promptY = Mathf.Max(40f, Screen.height - 250f);
-        GUI.Box(
-            new Rect(Screen.width / 2f - 130f, promptY, 260f, 36f),
-            "[E] Exit Arcade");
+        ArcadePromptUi.DrawCard(
+            "ARCADE EXIT",
+            "PRESS [E]  RETURN OUTSIDE",
+            "Walk close to the doorway and look at the exit to leave the arcade.",
+            132f,
+            new Color(0.95f, 0.35f, 0.38f, 1f));
     }
 }

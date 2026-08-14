@@ -11,6 +11,8 @@ internal sealed class CabinetInteractionService
     private readonly Func<bool> _canInteract;
     private ArcadeCabinet? _lookedAt;
 
+    public bool IsLookingAtCabinet => _lookedAt != null;
+
     public CabinetInteractionService(
         CabinetRegistryService registry,
         ArcadeSessionService session,
@@ -47,25 +49,55 @@ internal sealed class CabinetInteractionService
 
         if (_session.IsPlaying)
         {
-            GUI.Box(new Rect(Screen.width / 2f - 145f, Screen.height - 90f, 290f, 34f),
+            ArcadePromptUi.DrawCard(
+                GetDisplayName(_session.ActiveCabinet),
                 _session.ActiveCabinet?.Id.Equals("TV", StringComparison.OrdinalIgnoreCase) == true
-                    ? "TV: arrows play | TAB menu | ESC exit"
+                    ? "ARROWS PLAY  •  TAB MENU  •  ESC EXIT"
                     : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
-                        ? "PAC-MAN: arrows move | TAB pause | ESC exit"
-                    : "Arcade playing - ESC to stop game");
+                        ? "ARROWS MOVE  •  TAB PAUSE  •  ESC EXIT"
+                        : "ARROWS PLAY  •  ESC EXIT",
+                "Arcade session active — player controls and hotbar are locked.",
+                52f,
+                new Color(0.10f, 0.88f, 1.00f, 1f));
             return;
         }
 
         if (_lookedAt == null)
             return;
 
-        string state = _lookedAt.IsOccupied
-            ? "Machine In Use"
+        string action = _lookedAt.IsOccupied
+            ? "MACHINE IN USE"
             : _lookedAt.Id.Equals("TV", StringComparison.OrdinalIgnoreCase)
-                ? "[E] Play Arcade TV"
+                ? "PRESS [E]  PLAY PONG + SNAKE"
                 : _lookedAt.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
-                    ? "[E] Play Pac-Man"
-                : "[E] Play Arcade";
-        GUI.Box(new Rect(Screen.width / 2f - 130f, Screen.height - 90f, 260f, 34f), state);
+                    ? "PRESS [E]  PLAY PAC-MAN"
+                    : "PRESS [E]  START ARCADE DEMO";
+        string detail = _lookedAt.IsOccupied
+            ? "Wait for the current player to finish."
+            : "Look directly at this machine to interact.  [F] picks it up to move it.";
+        ArcadePromptUi.DrawCard(
+            GetDisplayName(_lookedAt),
+            action,
+            detail,
+            224f,
+            _lookedAt.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
+                ? new Color(1.00f, 0.80f, 0.12f, 1f)
+                : new Color(0.10f, 0.88f, 1.00f, 1f));
+    }
+
+    private static string GetDisplayName(ArcadeCabinet? cabinet)
+    {
+        if (cabinet == null)
+            return "ARCADE SESSION";
+        if (cabinet.Id.Equals("TV", StringComparison.OrdinalIgnoreCase))
+            return "ARCADE TV";
+        if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
+            return "PAC-MAN COCKTAIL TABLE";
+        return cabinet.Id switch
+        {
+            "01" => "STAND-UP ARCADE 1",
+            "02" => "STAND-UP ARCADE 2",
+            _ => "ARCADE MACHINE"
+        };
     }
 }

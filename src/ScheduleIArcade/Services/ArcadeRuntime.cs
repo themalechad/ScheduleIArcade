@@ -55,7 +55,8 @@ internal sealed class ArcadeRuntime : IDisposable
         _customAssets = new ArcadeCustomAssetPlacementService(
             _location,
             () => _entrance.IsInsideArcade,
-            () => _session.IsPlaying);
+            () => _session.IsPlaying,
+            () => _interaction?.IsLookingAtCabinet == true);
         _exit = new ArcadeExitInteractionService(_location, _entrance, _session);
 
         _ambience = new ArcadeAmbienceService(_location, _preferences, () => _entrance.IsInsideArcade);

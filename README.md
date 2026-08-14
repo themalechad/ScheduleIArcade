@@ -1,4 +1,25 @@
-# Schedule I Arcade M2.44
+# Schedule I Arcade M2.45
+
+M2.45 replaces the black idle rectangles on the Arcade TV, both stand-up cabinets, and the Pac-Man
+cocktail table with bright generated attract displays. Each has its own readable title and `PRESS E`
+instruction, so the source pack's near-black helper texture can no longer hide an interactive screen.
+
+Prompts now use a single high-contrast arcade card treatment. They only appear when the player is
+within 2.35 metres and the crosshair is directly on the asset. Screen-bearing machines show one
+combined `E` play / `F` move card; tables and pinballs show only their move card. Carrying a machine
+uses clear green/red placement status and a separate control reminder.
+
+The interior now has brighter warm ceiling illumination plus cyan and magenta arcade wall washes.
+These are point lights only—no long roof light bars have been reintroduced.
+
+The Pac-Man table now also loads Pac-Man, ghost, pellet, energizer, and marquee art extracted from
+the supplied `PacMan v1.1.1` Unity data files. That uses the real compatible assets from the package
+in the in-world renderer, rather than trying to run its separate Mono `Assembly-CSharp.dll` inside
+Schedule I. The Arcade TV view is pulled back to keep the complete TV screen and console in frame.
+
+See `TEST_M2.45.txt` for the focused regression pass.
+
+## M2.44
 
 M2.44 closes the old Street Fighter doorway aperture with a finished interior wall panel after
 moving the physical door to the right. The mural artwork is unchanged and unmirrored.
@@ -12,7 +33,7 @@ The pre-placed Pac-Man cocktail table is now playable: aim at the tabletop and p
 locked overhead play view and runs a self-contained Pac-Man game with pellets, power pellets,
 ghosts, scoring, lives and levels. Arrow keys move, Tab pauses/resumes, and Escape leaves the table.
 The game is recreated for Schedule I's IL2CPP runtime from the supplied PacMan v1.1.1 gameplay
-structure; its standalone Unity executable is not loaded or redistributed.
+structure; its standalone Mono Unity executable is not loaded into the incompatible IL2CPP process.
 
 M2.44 also completes the grid/HUD safeguards: the native grid lookup is cleared before its rebuilt
 coordinates are registered, and carrying a custom machine no longer draws the unsupported HUD

@@ -15,6 +15,7 @@ internal static class ModPaths
     public static string RawSceneLayoutPath => Path.Combine(RawSceneRoot, "arcade_layout.txt");
     public static string RawSceneTexturesRoot => Path.Combine(RawSceneRoot, "Textures");
     public static string AudioRoot => Path.Combine(AssetsRoot, "Audio");
+    public static string PacManAssetsRoot => Path.Combine(AssetsRoot, "PacMan");
     public static string AmbiencePath => Path.Combine(AudioRoot, Constants.AmbienceFileName);
 
     public static void EnsureDirectories()
@@ -23,6 +24,7 @@ internal static class ModPaths
         Directory.CreateDirectory(AssetsRoot);
         Directory.CreateDirectory(RawSceneRoot);
         Directory.CreateDirectory(RawSceneTexturesRoot);
+        Directory.CreateDirectory(PacManAssetsRoot);
         Directory.CreateDirectory(AudioRoot);
         Directory.CreateDirectory(GamesRoot);
     }

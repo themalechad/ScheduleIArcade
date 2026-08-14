@@ -295,6 +295,17 @@ if (-not $BuildOnly) {
         Write-Host "Arcade ambience WAV is missing from this package; the arcade will run silently." -ForegroundColor Yellow
     }
 
+    # Visual art extracted from the user-supplied PacMan v1.1.1 Unity data files. The source game
+    # remains a separate Mono Unity executable, so Schedule I's IL2CPP mod uses these compatible
+    # PNG assets inside the in-table renderer rather than attempting to load its managed DLL.
+    $pacManSource = Join-Path $ProjectRoot "dist\Mods\ScheduleIArcade\Assets\PacMan"
+    $pacManDest = Join-Path $assets "PacMan"
+    if (Test-Path $pacManSource) {
+        if (Test-Path $pacManDest) { Remove-Item $pacManDest -Recurse -Force }
+        Copy-Item $pacManSource $pacManDest -Recurse -Force
+        Write-Host "Installed Pac-Man source visual assets: $pacManDest" -ForegroundColor Green
+    }
+
     # Optional real AssetBundle. The raw FBX runtime package above is now the normal test path,
     # so the test does not require Unity Editor or a prebuilt bundle.
     $bundleCandidates = @(

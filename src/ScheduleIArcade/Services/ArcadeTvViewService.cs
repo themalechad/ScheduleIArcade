@@ -193,9 +193,11 @@ internal sealed class ArcadeTvViewService
         else
         {
             Vector3 viewingDirection = root.TransformDirection(Vector3.back).normalized;
-            cameraPosition = screenCenter + viewingDirection * 0.78f + Vector3.up * 0.015f;
+            // Keep the complete TV bezel and console in frame. The previous close distance made
+            // the screen fill the view too aggressively for a relaxed in-room arcade session.
+            cameraPosition = screenCenter + viewingDirection * 1.30f + Vector3.up * 0.06f;
             cameraRotation = Quaternion.LookRotation(screenCenter - cameraPosition, Vector3.up);
-            fov = 40f;
+            fov = 54f;
         }
 
         var camera = Il2CppScheduleOne.PlayerScripts.PlayerCamera.Instance;

@@ -1395,51 +1395,17 @@ internal sealed class RawArcadeSceneService : IDisposable
 
     private Material CreateTvStandbyMaterial()
     {
-        Material material = CreateUnlitTextureMaterial("Bright_map.jpg", "ScheduleIArcade_M_TvStandby");
-        const int width = 128;
-        const int height = 72;
-        var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
-        {
-            name = "ScheduleIArcade_TvStandby",
-            filterMode = FilterMode.Point,
-            wrapMode = TextureWrapMode.Clamp
-        };
-        var pixels = new Color32[width * height];
-        var dark = new Color32(2, 5, 18, 255);
-        var cyan = new Color32(20, 225, 255, 255);
-        var pink = new Color32(255, 42, 132, 255);
-        var green = new Color32(58, 245, 115, 255);
-        Array.Fill(pixels, dark);
-
-        for (int y = 3; y < height - 3; y++)
-        {
-            for (int x = 3; x < width - 3; x++)
-            {
-                bool border = x < 5 || x >= width - 5 || y < 5 || y >= height - 5;
-                bool leftGame = x >= 17 && x < 57 && y >= 22 && y < 51;
-                bool rightGame = x >= 71 && x < 111 && y >= 22 && y < 51;
-                if (border) pixels[y * width + x] = cyan;
-                else if (leftGame) pixels[y * width + x] = pink;
-                else if (rightGame) pixels[y * width + x] = green;
-            }
-        }
-
-        texture.SetPixels32(pixels);
-        texture.Apply(false, false);
-        _textures["__arcade_tv_standby"] = texture;
-        if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
-        if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
-        if (material.HasProperty("_EmissionMap"))
-        {
-            material.SetTexture("_EmissionMap", texture);
-            material.EnableKeyword("_EMISSION");
-        }
-        return material;
+        return CreateAttractScreenMaterial(
+            "ScheduleIArcade_M_TvStandby",
+            "__arcade_tv_standby",
+            "ARCADE TV",
+            "PRESS E",
+            new Color32(22, 230, 255, 255),
+            new Color32(255, 55, 155, 255));
     }
 
     private void CreateCabinetScreens(Transform root)
     {
-        Material screenMaterial = CreateUnlitTextureMaterial("Bright_map.jpg", "ScheduleIArcade_M_CabinetScreen");
         for (int index = 1; index <= 2; index++)
         {
             string suffix = index.ToString("00");
@@ -1458,7 +1424,21 @@ internal sealed class RawArcadeSceneService : IDisposable
 
             var renderer = screen.GetComponent<Renderer>();
             if (renderer != null)
-                renderer.sharedMaterial = screenMaterial;
+            {
+                Color32 primary = index == 1
+                    ? new Color32(255, 65, 155, 255)
+                    : new Color32(45, 228, 255, 255);
+                Color32 secondary = index == 1
+                    ? new Color32(255, 202, 55, 255)
+                    : new Color32(118, 255, 120, 255);
+                renderer.sharedMaterial = CreateAttractScreenMaterial(
+                    "ScheduleIArcade_M_CabinetScreen" + suffix,
+                    "__arcade_cabinet_standby_" + suffix,
+                    "ARCADE " + index,
+                    "PRESS E",
+                    primary,
+                    secondary);
+            }
 
             // Keep the collider: aiming at either monitor resolves to that cabinet parent.
         }
@@ -1489,7 +1469,13 @@ internal sealed class RawArcadeSceneService : IDisposable
 
         Renderer? renderer = screen.GetComponent<Renderer>();
         if (renderer != null)
-            renderer.sharedMaterial = CreateUnlitTextureMaterial("Bright_map.jpg", "ScheduleIArcade_M_PacmanCocktailScreen");
+            renderer.sharedMaterial = CreateAttractScreenMaterial(
+                "ScheduleIArcade_M_PacmanCocktailScreen",
+                "__arcade_pacman_standby",
+                "PAC-MAN",
+                "PRESS E",
+                new Color32(255, 224, 42, 255),
+                new Color32(52, 110, 255, 255));
 
         MelonLogger.Msg("Pre-placed Pac-Man cocktail table is interactive: aim at its top and press E to play.");
     }
@@ -1518,17 +1504,49 @@ internal sealed class RawArcadeSceneService : IDisposable
         return material;
     }
 
+    private Material CreateAttractScreenMaterial(
+        string materialName,
+        string textureKey,
+        string title,
+        string subtitle,
+        Color32 accent,
+        Color32 accent2)
+    {
+        Material material = CreateUnlitTextureMaterial(string.Empty, materialName);
+        Texture2D texture = ArcadeAttractScreenFactory.Create(
+            "ScheduleIArcade_" + textureKey.TrimStart('_'),
+            128,
+            72,
+            title,
+            subtitle,
+            accent,
+            accent2);
+        _textures[textureKey] = texture;
+        if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
+        if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+        if (material.HasProperty("_EmissionMap"))
+        {
+            material.SetTexture("_EmissionMap", texture);
+            if (material.HasProperty("_EmissionColor")) material.SetColor("_EmissionColor", Color.white);
+            material.EnableKeyword("_EMISSION");
+        }
+        return material;
+    }
+
     private static void CreateInteriorLights(Transform parent)
     {
-        // Layered light: warm ceiling illumination keeps textures readable, while restrained
-        // red/white accents echo the native exterior Arcade neon without washing out cabinet art.
+        // Bright local arcade lighting: short-range point fixtures and colour washes brighten
+        // machines and walls without adding the long roof bars the room no longer uses.
         Color warm = new(1.00f, 0.88f, 0.72f, 1f);
-        Color softWhite = new(0.82f, 0.86f, 1.00f, 1f);
-        Color red = new(1.00f, 0.20f, 0.20f, 1f);
-        CreatePointLight(parent, new Vector3(FX(-1.25f), 2.28f, FZ(-1.15f)), 6.2f, 0.90f, warm);
-        CreatePointLight(parent, new Vector3(FX(1.35f), 2.28f, FZ(1.25f)), 6.2f, 0.90f, warm);
-        CreatePointLight(parent, new Vector3(FX(-2.15f), 2.15f, FZ(1.25f)), 3.8f, 0.20f, softWhite);
-        CreatePointLight(parent, new Vector3(FX(1.85f), 2.05f, FZ(-1.90f)), 3.8f, 0.20f, red);
+        Color softWhite = new(0.83f, 0.90f, 1.00f, 1f);
+        Color cyan = new(0.08f, 0.82f, 1.00f, 1f);
+        Color magenta = new(1.00f, 0.12f, 0.48f, 1f);
+        CreatePointLight(parent, new Vector3(FX(-1.80f), 2.35f, FZ(-1.85f)), 5.2f, 2.00f, warm);
+        CreatePointLight(parent, new Vector3(FX(1.45f), 2.35f, FZ(-1.65f)), 5.2f, 2.00f, warm);
+        CreatePointLight(parent, new Vector3(FX(-1.55f), 2.35f, FZ(1.85f)), 5.2f, 2.00f, softWhite);
+        CreatePointLight(parent, new Vector3(FX(1.50f), 2.35f, FZ(1.85f)), 5.2f, 2.00f, softWhite);
+        CreatePointLight(parent, new Vector3(FX(-2.34f), 1.45f, FZ(-0.20f)), 3.2f, 1.10f, cyan);
+        CreatePointLight(parent, new Vector3(FX(2.20f), 1.45f, FZ(0.90f)), 3.2f, 1.10f, magenta);
     }
 
     private static void CreatePointLight(Transform parent, Vector3 localPosition, float range, float intensity)
@@ -1546,6 +1564,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         light.range = range;
         light.intensity = intensity;
         light.color = color;
+        light.shadows = LightShadows.None;
     }
 
     private static Transform? FindDeepChild(Transform root, string name)
