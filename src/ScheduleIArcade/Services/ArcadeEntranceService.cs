@@ -359,9 +359,9 @@ internal sealed class ArcadeEntranceService : IDisposable
         // Keep this separate from the front-door return point so the interior door behaves like
         // a real second exit instead of snapping the player back to the entrance.
         return CompleteExit(
-            // Shift back 1.25m from the original west-facing anchor. The previous point put
-            // the player too far forward of the real rear door after controller alignment.
-            new Vector3(-58.65f, -3.0f, 146.1f),
+            // Continue 5m backward along the west-facing service route. This lands at the blue
+            // service door rather than the nearer red door where the earlier offset stopped.
+            new Vector3(-53.65f, -3.0f, 146.1f),
             "Exited the custom arcade through the rear door to the west side of the building.",
             -90f);
     }

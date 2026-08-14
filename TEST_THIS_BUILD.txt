@@ -1,9 +1,8 @@
-SCHEDULE I ARCADE M2.48 - FLUSH CRTS AND DOOM-THEMED CABINETS
+SCHEDULE I ARCADE M2.49 - BLUE SERVICE DOOR EXIT
 
-See TEST_M2.48.txt for the complete focused test flow.
+See TEST_M2.49.txt for the complete focused test flow.
 
 Quick check:
-1. Confirm both stand-up CRTs sit inside their actual monitor recesses.
-2. Confirm cabinet 1 has the orange/bone `DOOM I` skin.
-3. Confirm cabinet 2 has the green/steel `DOOM II` skin.
-4. Start and leave each arcade demo; its display and movement controls must still work.
+1. Use the rear mural door.
+2. Confirm it lands at the blue service door, rather than the red door.
+3. Confirm the player is facing west at the destination.

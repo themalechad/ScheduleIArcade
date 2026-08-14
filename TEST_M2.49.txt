@@ -1,0 +1,5 @@
+SCHEDULE I ARCADE M2.49 - BLUE SERVICE DOOR EXIT
+
+1. Enter the custom arcade and use the rear Street Fighter mural door.
+2. Confirm the player exits at the blue service door, not the red door, at (-53.65, -3.0, 146.1).
+3. Confirm the player remains facing west after the teleport.

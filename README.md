@@ -1,4 +1,12 @@
-# Schedule I Arcade M2.48
+# Schedule I Arcade M2.49
+
+M2.49 moves the rear arcade exit a further 5m backward along its west-facing route. It now targets
+the blue service door at `(-53.65, -3.0, 146.1)` instead of the nearer red door, while preserving
+the west-facing player direction.
+
+See `TEST_M2.49.txt` for the focused regression pass.
+
+## M2.48
 
 M2.48 places both stand-up CRTs on the actual recessed monitor plane instead of the cabinets'
 outer collision shell, with a 2 mm visual offset to prevent flickering. Both entire cabinet meshes

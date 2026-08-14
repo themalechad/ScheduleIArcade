@@ -3,7 +3,7 @@ namespace ScheduleIArcade.Utils;
 internal static class Constants
 {
     public const string ModName = "Schedule I Arcade";
-    public const string ModVersion = "0.2.48-doom-cabinets-flush-screens";
+    public const string ModVersion = "0.2.49-blue-door-exit";
     public const string ModAuthor = "GrandmasAnkles/XUnfairX";
     public const string PreferencesCategory = "ScheduleIArcade";
 
