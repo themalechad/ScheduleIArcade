@@ -1,4 +1,15 @@
-# Schedule I Arcade M2.51
+# Schedule I Arcade M2.52
+
+M2.52 makes all four physical pinball machines playable with a self-contained Space Cadet-style
+pinball port. Every machine now has a fitted player-facing display with an idle attract screen;
+press E to start a live table with a ball, plunger, left/right flippers, bumpers, slings, targets,
+score multipliers, balls, and game-over/restart flow. It is a new Unity/IL2CPP implementation
+informed by the MIT-licensed SpaceCadetPinball project's component model, with no original Windows
+game data or artwork included.
+
+See TEST_M2.52.txt for the focused regression pass.
+
+## M2.51
 
 M2.51 frames every upright cabinet from its actual fitted CRT face instead of assuming a shared
 root-facing axis. This puts the Doom play view directly in front of the correct monitor rather than

@@ -17,10 +17,12 @@ internal sealed class CabinetRegistryService
 
         foreach (var transform in transforms)
         {
-            if (!transform.name.StartsWith(Constants.CabinetPrefix, StringComparison.OrdinalIgnoreCase))
+            bool isPinball = TryGetPinballSuffix(transform.name, out string suffix);
+            if (!isPinball && !transform.name.StartsWith(Constants.CabinetPrefix, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            string suffix = transform.name[Constants.CabinetPrefix.Length..];
+            if (!isPinball)
+                suffix = transform.name[Constants.CabinetPrefix.Length..];
             var screen = FindScreen(transform, suffix);
             if (screen == null)
             {
@@ -28,7 +30,9 @@ internal sealed class CabinetRegistryService
                 continue;
             }
 
-            string gameId = suffix.Equals("TV", StringComparison.OrdinalIgnoreCase)
+            string gameId = isPinball
+                ? "space_cadet_pinball"
+                : suffix.Equals("TV", StringComparison.OrdinalIgnoreCase)
                 ? "arcade_tv"
                 : suffix.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
                     ? "pacman"
@@ -67,5 +71,19 @@ internal sealed class CabinetRegistryService
                 return renderer;
         }
         return null;
+    }
+
+    private static bool TryGetPinballSuffix(string name, out string suffix)
+    {
+        const string prefix = "Pinball Machine ";
+        suffix = string.Empty;
+        if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!int.TryParse(name[prefix.Length..], out int number) || number < 1 || number > 4)
+            return false;
+
+        suffix = "PINBALL" + number.ToString("00");
+        return true;
     }
 }

@@ -56,7 +56,9 @@ internal sealed class CabinetInteractionService
                     : _session.ActiveCabinet?.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase) == true ||
                       _session.ActiveCabinet?.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase) == true
                         ? "WASD / ARROWS PLAY  •  ESC EXIT"
-                        : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
+                        : _session.ActiveCabinet?.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase) == true
+                            ? "LEFT / RIGHT FLIPPERS  •  SPACE LAUNCH  •  ESC EXIT"
+                            : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
                             ? "ARROWS MOVE  •  TAB PAUSE  •  ESC EXIT"
                             : "ARROWS PLAY  •  ESC EXIT",
                 "Arcade session active — player controls and hotbar are locked.",
@@ -74,8 +76,10 @@ internal sealed class CabinetInteractionService
                 ? "PRESS [E]  PLAY PONG + SNAKE"
                 : _lookedAt.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase)
                     ? "PRESS [E]  PLAY DOOM I"
-                    : _lookedAt.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase)
-                        ? "PRESS [E]  PLAY DOOM II"
+                : _lookedAt.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase)
+                    ? "PRESS [E]  PLAY DOOM II"
+                    : _lookedAt.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase)
+                        ? "PRESS [E]  PLAY SPACE CADET PINBALL"
                         : _lookedAt.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
                             ? "PRESS [E]  PLAY PAC-MAN"
                             : "PRESS [E]  START ARCADE DEMO";
@@ -104,6 +108,8 @@ internal sealed class CabinetInteractionService
             return "DOOM I CABINET";
         if (cabinet.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase))
             return "DOOM II CABINET";
+        if (cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
+            return "SPACE CADET PINBALL";
         return cabinet.Id switch
         {
             "01" => "STAND-UP ARCADE 1",

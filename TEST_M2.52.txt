@@ -1,0 +1,10 @@
+SCHEDULE I ARCADE M2.52 - SPACE CADET PINBALL
+
+1. Enter the custom arcade and walk to the row of four pinball machines.
+2. Confirm each player-facing backbox display shows SPACE CADET / PRESS E instead of a black rectangle.
+3. Aim directly at a machine and press E. The view should frame the pinball display and lock player/hotbar controls.
+4. Press SPACE or UP to launch the ball.
+5. Use LEFT ARROW or Z for the left flipper; use RIGHT ARROW, SLASH, or X for the right flipper.
+6. Confirm bumpers, slings, and lit side targets move the ball and increase the score.
+7. Complete both target banks to increase the score multiplier. Drain all balls, then press SPACE to restart.
+8. Press ESC to exit. Confirm the player returns to normal arcade movement and the machine stays movable with F.

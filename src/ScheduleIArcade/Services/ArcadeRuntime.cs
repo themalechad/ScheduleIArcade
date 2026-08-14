@@ -34,6 +34,7 @@ internal sealed class ArcadeRuntime : IDisposable
         _games.Register("pacman", () => new PacmanCocktailGame());
         _games.Register("doom1", () => new ExternalDoomArcadeGame(DoomCabinetEdition.Doom1));
         _games.Register("doom2", () => new ExternalDoomArcadeGame(DoomCabinetEdition.Doom2));
+        _games.Register("space_cadet_pinball", () => new SpaceCadetPinballGame());
         _location = new ArcadeLocationService(_assets, _preferences);
         _session = new ArcadeSessionService(_games);
 

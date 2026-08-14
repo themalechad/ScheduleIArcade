@@ -1,8 +1,8 @@
-SCHEDULE I ARCADE M2.51 - DOOM SCREEN ORIENTATION
+SCHEDULE I ARCADE M2.52 - SPACE CADET PINBALL
 
-See TEST_M2.51.txt for the complete focused test flow.
+See TEST_M2.52.txt for the complete focused test flow.
 
 Quick check:
-1. Use DOOM I and DOOM II cabinets.
-2. Confirm each camera frames its CRT face and live game output.
-3. Confirm all visible DOOM I / DOOM II titles read left-to-right.
+1. Aim at any pinball machine and press E.
+2. Press SPACE to launch the ball and LEFT/RIGHT to use the flippers.
+3. Confirm score, balls, targets, and bumpers update on the fitted display.

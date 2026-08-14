@@ -130,6 +130,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             try
             {
                 CreateCabinetScreens(root.transform);
+                CreatePinballTableScreens(root.transform);
             }
             catch (Exception screenEx)
             {
@@ -1519,6 +1520,44 @@ internal sealed class RawArcadeSceneService : IDisposable
                 new Color32(52, 110, 255, 255));
 
         MelonLogger.Msg("Pre-placed Pac-Man cocktail table is interactive: aim at its top and press E to play.");
+    }
+
+    private void CreatePinballTableScreens(Transform root)
+    {
+        for (int index = 1; index <= 4; index++)
+        {
+            Transform? machine = FindDeepChild(root, "Pinball Machine " + index.ToString("00"));
+            MeshFilter? filter = machine?.GetComponent<MeshFilter>();
+            if (machine == null || filter == null || filter.sharedMesh == null)
+                continue;
+
+            Bounds bounds = filter.sharedMesh.bounds;
+            string suffix = "PINBALL" + index.ToString("00");
+            var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            screen.name = Constants.ScreenPrefix + suffix;
+            screen.transform.SetParent(machine, false);
+
+            // The pinball meshes' local +X side is the wall-facing backbox. Mount the game
+            // display on the opposite/front face, tightly inside the physical backbox bounds.
+            screen.transform.localPosition = new Vector3(
+                bounds.min.x - 0.006f,
+                bounds.min.y + bounds.size.y * 0.69f,
+                bounds.center.z);
+            screen.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
+            screen.transform.localScale = new Vector3(0.42f, 0.56f, 1f);
+
+            Renderer? renderer = screen.GetComponent<Renderer>();
+            if (renderer != null)
+                renderer.sharedMaterial = CreateAttractScreenMaterial(
+                    "ScheduleIArcade_M_PinballScreen" + index,
+                    "__arcade_pinball_standby_" + index,
+                    "SPACE CADET",
+                    "PRESS E",
+                    new Color32(82, 207, 255, 255),
+                    new Color32(255, 218, 96, 255));
+        }
+
+        MelonLogger.Msg("Four Space Cadet pinball displays were fitted to the machines' player-facing backboxes.");
     }
 
     private Material CreateUnlitTextureMaterial(string textureName, string materialName)
