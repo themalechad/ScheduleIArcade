@@ -1,4 +1,22 @@
-# Schedule I Arcade M2.45
+# Schedule I Arcade M2.46
+
+M2.46 makes exit interaction deliberate: a prompt appears only when the player is close and looking
+directly at the matching doorway. The Street Fighter mural door is now a second exit. Aimed interaction
+there sends the player to `(-59.9, -3.0, 146.1)` at the back/west side of the real Arcade, facing west;
+the original entry doorway still returns to the normal exterior entrance point.
+
+The Pac-Man cocktail screen is now a small flush tabletop inset instead of a full-top overlay, and its
+texture orientation is corrected. The playable board has been rebuilt as a 28 x 31 classic maze with a
+central ghost pen, pellets, energizers, scoring, lives, frightened ghosts, and a wrapping tunnel. It
+continues to render the compatible Pac-Man / ghost / pellet art extracted from the supplied package.
+
+The stand-up cabinet displays now sit only millimetres in front of the authored monitor plane. Cabinet 02
+has been turned to use its real front axis, so both cabinet screens face the arcade floor rather than a
+wall. The editable Blender layout and exported runtime scene carry the same corrected orientation.
+
+See `TEST_M2.46.txt` for the focused regression pass.
+
+## M2.45
 
 M2.45 replaces the black idle rectangles on the Arcade TV, both stand-up cabinets, and the Pac-Man
 cocktail table with bright generated attract displays. Each has its own readable title and `PRESS E`

@@ -20,6 +20,7 @@ internal sealed class ArcadeLocationService : IDisposable
     public GameObject? RoomInstance { get; private set; }
     public Transform? SpawnMarker { get; private set; }
     public Transform? ExitMarker { get; private set; }
+    public Transform? BackExitMarker { get; private set; }
     public bool UsingProceduralFallback { get; private set; }
     public bool UsingRawScene { get; private set; }
     private bool _entryAnchorPrepared;
@@ -40,6 +41,7 @@ internal sealed class ArcadeLocationService : IDisposable
 
             SpawnMarker = FindDeepChild(RoomInstance.transform, Constants.SpawnMarkerName);
             ExitMarker = FindDeepChild(RoomInstance.transform, Constants.ExitMarkerName);
+            BackExitMarker = FindDeepChild(RoomInstance.transform, Constants.BackExitMarkerName);
 
             if (SpawnMarker == null || ExitMarker == null)
             {
@@ -65,6 +67,7 @@ internal sealed class ArcadeLocationService : IDisposable
                     RoomInstance = root;
                     SpawnMarker = rawSpawn;
                     ExitMarker = rawExit;
+                    BackExitMarker = FindDeepChild(root.transform, Constants.BackExitMarkerName);
                     UsingRawScene = true;
                     UsingProceduralFallback = false;
                     _entryAnchorPrepared = false;
@@ -225,6 +228,7 @@ internal sealed class ArcadeLocationService : IDisposable
     {
         SpawnMarker = null;
         ExitMarker = null;
+        BackExitMarker = null;
         UsingProceduralFallback = false;
         UsingRawScene = false;
         _entryAnchorPrepared = false;

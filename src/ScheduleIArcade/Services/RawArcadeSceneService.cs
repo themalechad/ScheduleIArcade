@@ -104,6 +104,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             // the runtime test room is a complete interior instead of looking out into the sky.
             CreateMissingWalls(root.transform);
             CreateStreetFighterDoorInfill(root.transform);
+            CreateStreetFighterBackExitMarker(root.transform);
 
             // Add a visible checkerboard overlay floor that is slightly larger than the source
             // floor and the generated edge strips. This hides any remaining seams and gives the
@@ -666,6 +667,17 @@ internal sealed class RawArcadeSceneService : IDisposable
         CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameBottom", parent, new Vector3(x, center.y - height * 0.5f, center.z), new Vector3(0.045f, 0.075f, width + 0.11f), Quaternion.identity, frame);
         CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameNorth", parent, new Vector3(x, center.y, center.z + width * 0.5f), new Vector3(0.045f, height + 0.14f, 0.075f), Quaternion.identity, frame);
         CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameSouth", parent, new Vector3(x, center.y, center.z - width * 0.5f), new Vector3(0.045f, height + 0.14f, 0.075f), Quaternion.identity, frame);
+    }
+
+    private static void CreateStreetFighterBackExitMarker(Transform parent)
+    {
+        // This is the visible single door on the mural wall after it was moved to the right.
+        // The hotspot stays on the player-facing side of that door and is evaluated only by the
+        // close-range look interaction in ArcadeExitInteractionService.
+        var marker = new GameObject(Constants.BackExitMarkerName);
+        marker.transform.SetParent(parent, false);
+        marker.transform.localPosition = new Vector3(FX(2.52f) - 0.28f, 0.95f, FZ(-2.30f));
+        marker.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
     }
 
     private void CreateWallSegment(string name, Transform parent, Vector3 localA, Vector3 localB, float height, float thickness, Material? material)
@@ -1416,11 +1428,13 @@ internal sealed class RawArcadeSceneService : IDisposable
             var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
             screen.name = Constants.ScreenPrefix + suffix;
             screen.transform.SetParent(cabinet, false);
-            // The imported cabinet screen/front is local -X. The root yaw points that face north
-            // into the aisle, so keep the helper display on the real screen plane as well.
-            screen.transform.localPosition = new Vector3(-0.30f, 0.30f, 0.00f);
-            screen.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
-            screen.transform.localScale = new Vector3(0.50f, 0.40f, 1f);
+            // The imported split cabinets have opposite authored fronts. Use the actual plane
+            // for each and a 6 mm offset only, so screens sit in the cabinet instead of floating.
+            bool isCabinetTwo = index == 2;
+            float frontX = isCabinetTwo ? 0.266f : -0.266f;
+            screen.transform.localPosition = new Vector3(frontX, 0.22f, 0.00f);
+            screen.transform.localRotation = Quaternion.Euler(0f, isCabinetTwo ? 90f : -90f, 0f);
+            screen.transform.localScale = new Vector3(0.38f, 0.28f, 1f);
 
             var renderer = screen.GetComponent<Renderer>();
             if (renderer != null)
@@ -1458,13 +1472,16 @@ internal sealed class RawArcadeSceneService : IDisposable
         var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
         screen.name = Constants.ScreenPrefix + "PACMAN";
         screen.transform.SetParent(table, false);
-        screen.transform.localPosition = new Vector3(bounds.center.x, bounds.max.y + 0.012f, bounds.center.z);
+        screen.transform.localPosition = new Vector3(bounds.center.x, bounds.max.y + 0.004f, bounds.center.z);
         // The cocktail display lies horizontally. Its +Y texture axis maps toward the table's
         // player side so the overhead interaction camera reads score text normally.
         screen.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+        // Keep the playable surface inside the existing printed Pac-Man display inset. The
+        // previous full-top overlay hid the table artwork and looked like a floating black slab.
+        // Negative X corrects the cocktail display's horizontal U axis for the overhead camera.
         screen.transform.localScale = new Vector3(
-            Mathf.Max(0.64f, bounds.size.x * 0.82f),
-            Mathf.Max(0.82f, bounds.size.z * 0.82f),
+            -Mathf.Min(1.10f, bounds.size.x * 0.46f),
+            Mathf.Min(0.48f, bounds.size.z * 0.48f),
             1f);
 
         Renderer? renderer = screen.GetComponent<Renderer>();

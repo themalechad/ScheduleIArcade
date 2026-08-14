@@ -1,0 +1,18 @@
+SCHEDULE I ARCADE M2.46 - PAC-MAN, DISPLAYS, AND DOOR TARGETING
+
+1. Restart Schedule I, enter the custom arcade, and stand near either interior exit while looking
+   elsewhere. Confirm there is no exit card and E does nothing.
+2. Move within arm's reach of the entrance doorway and aim directly at it. Confirm the `ARCADE EXIT`
+   card appears; press E and confirm the standard front-door exterior return still works.
+3. Re-enter, stand by the single door on the Street Fighter mural wall, and aim directly at it.
+   Confirm `WEST SIDE DOOR` appears only while it is centred in view. Press E and confirm the player
+   reaches (-59.9, -3.0, 146.1), facing west.
+4. Inspect the Pac-Man cocktail table while idle. Its small readable `PAC-MAN / PRESS E` display
+   must sit inside the tabletop's printed screen/inlay rather than covering the whole table.
+5. Start Pac-Man. Confirm text reads normally (not mirrored), the board is a 28 x 31 classic maze
+   with four energizers and a central ghost pen, arrow keys move Pac-Man, pellets score, and the
+   horizontal tunnel wraps from one side to the other. Tab pauses and Escape exits as before.
+6. Inspect both stand-up cabinets. Each monitor must be nearly flush with its real cabinet face;
+   cabinet 02's screen must face into the room rather than toward its wall.
+7. Verify the four pinballs still have their backs against the wall and all prompts/moving controls
+   continue to work for the machine rows.

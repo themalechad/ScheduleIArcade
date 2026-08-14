@@ -10,7 +10,7 @@ TARGET_YAWS = {
     'Pinball Machine 03': -180.0,
     'Pinball Machine 04': -180.0,
     'Arcade Machine 01': -90.0,
-    'Arcade Machine 02': -90.0,
+    'Arcade Machine 02': 90.0,
 }
 
 

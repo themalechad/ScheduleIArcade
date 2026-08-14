@@ -352,6 +352,29 @@ internal sealed class ArcadeEntranceService : IDisposable
             return false;
         }
 
+        return CompleteExit(destination, "Exited the custom arcade and re-armed the vanilla Arcade door for another knock.");
+    }
+
+    public bool ExitArcadeToWestSide()
+    {
+        // Requested rear-door destination: the western side behind the real arcade building.
+        // Keep this separate from the front-door return point so the interior door behaves like
+        // a real second exit instead of snapping the player back to the entrance.
+        return CompleteExit(
+            new Vector3(-59.9f, -3.0f, 146.1f),
+            "Exited the custom arcade through the rear door to the west side of the building.",
+            -90f);
+    }
+
+    private bool CompleteExit(Vector3 destination, string logMessage, float? facingYaw = null)
+    {
+        if (!IsInsideArcade)
+            return false;
+
+        Player? player = Player.Local;
+        if (player == null)
+            return false;
+
         // Clear any delayed vanilla summon UI before returning to the exterior and explicitly
         // re-arm the real StaticDoor interaction. This makes enter -> exit -> knock -> enter a
         // repeatable loop instead of a one-shot interaction.
@@ -360,17 +383,33 @@ internal sealed class ArcadeEntranceService : IDisposable
         HideFallbackChoice(restoreGameplay: true);
         _awaitingDoorMenu = false;
 
-        // This return point was captured from S1API Player.Position, so restore that exact
-        // exterior root position rather than treating it as a foot-aligned interior marker.
-        player.Position = destination;
+        // The native teleport keeps the controller grounded when the west-side destination is
+        // reached from the pocket interior. It also safely handles the front-door return point.
+        TeleportPlayerWithController(player, destination, "exit arcade");
+        if (facingYaw.HasValue)
+            FacePlayer(facingYaw.Value);
         Physics.SyncTransforms();
         IsInsideArcade = false;
         _outsideReturnPosition = null;
         _lastDoorSignalTime = -999f;
         _suppressDoorUntil = Time.unscaledTime + 0.20f;
         RearmExteriorDoorInteraction();
-        MelonLogger.Msg("Exited the custom arcade and re-armed the vanilla Arcade door for another knock.");
+        MelonLogger.Msg(logMessage);
         return true;
+    }
+
+    private static void FacePlayer(float yaw)
+    {
+        try
+        {
+            Camera? mainCamera = Camera.main;
+            if (mainCamera != null)
+                mainCamera.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+        }
+        catch
+        {
+            // The destination remains correct even if a camera wrapper changes between builds.
+        }
     }
 
     private void RearmExteriorDoorInteraction()
