@@ -525,6 +525,13 @@ internal sealed class ArcadeBuildSurfaceService : IDisposable
             registered++;
         }
 
+        // Grid.Awake already filled this dictionary from the template's serialized coordinates.
+        // We intentionally replaced CoordinateTilePairs above, so clear the old lookup before it
+        // is rebuilt or the first original key (usually [0,0]) is added twice and aborts the
+        // entire arcade floor-grid registration.
+        object? coordinateLookup = ReflectionUtil.GetMemberValue(ownerGrid, "_coordinateToTile");
+        if (!ReflectionUtil.TryInvoke(coordinateLookup, "Clear"))
+            throw new InvalidOperationException("Could not clear the native Grid coordinate lookup before rebuilding it.");
         ownerGrid.ProcessCoordinateDataPairs();
         ownerGrid.SetGridSize();
         if (registered != tiles.Length || ownerGrid.Tiles.Count != registered)

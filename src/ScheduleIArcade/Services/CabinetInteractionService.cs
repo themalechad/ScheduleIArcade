@@ -50,6 +50,8 @@ internal sealed class CabinetInteractionService
             GUI.Box(new Rect(Screen.width / 2f - 145f, Screen.height - 90f, 290f, 34f),
                 _session.ActiveCabinet?.Id.Equals("TV", StringComparison.OrdinalIgnoreCase) == true
                     ? "TV: arrows play | TAB menu | ESC exit"
+                    : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
+                        ? "PAC-MAN: arrows move | TAB pause | ESC exit"
                     : "Arcade playing - ESC to stop game");
             return;
         }
@@ -61,6 +63,8 @@ internal sealed class CabinetInteractionService
             ? "Machine In Use"
             : _lookedAt.Id.Equals("TV", StringComparison.OrdinalIgnoreCase)
                 ? "[E] Play Arcade TV"
+                : _lookedAt.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
+                    ? "[E] Play Pac-Man"
                 : "[E] Play Arcade";
         GUI.Box(new Rect(Screen.width / 2f - 130f, Screen.height - 90f, 260f, 34f), state);
     }

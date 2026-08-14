@@ -31,6 +31,7 @@ internal sealed class ArcadeRuntime : IDisposable
 
         _games.Register("test_pattern", () => new TestPatternArcadeGame());
         _games.Register("arcade_tv", () => new ArcadeTvGame());
+        _games.Register("pacman", () => new PacmanCocktailGame());
         _location = new ArcadeLocationService(_assets, _preferences);
         _session = new ArcadeSessionService(_games);
 

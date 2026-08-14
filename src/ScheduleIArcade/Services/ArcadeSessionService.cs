@@ -43,7 +43,8 @@ internal sealed class ArcadeSessionService : IDisposable
             cabinet.IsOccupied = true;
             _activeCabinet = cabinet;
             _activeGame = game;
-            if (cabinet.Id.Equals("TV", StringComparison.OrdinalIgnoreCase))
+            if (cabinet.Id.Equals("TV", StringComparison.OrdinalIgnoreCase) ||
+                cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
                 _tvView.Enter(cabinet);
             MelonLogger.Msg($"Started {game.DisplayName} on cabinet {cabinet.Id}.");
             return true;

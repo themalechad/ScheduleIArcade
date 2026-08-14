@@ -1,4 +1,26 @@
-# Schedule I Arcade M2.43
+# Schedule I Arcade M2.44
+
+M2.44 closes the old Street Fighter doorway aperture with a finished interior wall panel after
+moving the physical door to the right. The mural artwork is unchanged and unmirrored.
+
+The four pinball machines now use their actual model back axis and sit flush against the west wall;
+the two upright cabinets use their actual screen axis and face out into the room. The Blender export
+check now rejects machine rows that clip through a wall, and the build script excludes generated
+compiler files.
+
+The pre-placed Pac-Man cocktail table is now playable: aim at the tabletop and press E. It opens a
+locked overhead play view and runs a self-contained Pac-Man game with pellets, power pellets,
+ghosts, scoring, lives and levels. Arrow keys move, Tab pauses/resumes, and Escape leaves the table.
+The game is recreated for Schedule I's IL2CPP runtime from the supplied PacMan v1.1.1 gameplay
+structure; its standalone Unity executable is not loaded or redistributed.
+
+M2.44 also completes the grid/HUD safeguards: the native grid lookup is cleared before its rebuilt
+coordinates are registered, and carrying a custom machine no longer draws the unsupported HUD
+texture that produced the repeated `Method unstripping failed` error.
+
+See `TEST_M2.44.txt` for the focused regression pass.
+
+## M2.43
 
 M2.43 resolves the remaining placement and TV-session problems from the screenshot review. The
 custom-furniture HUD no longer calls an IL2CPP callback during Unity's GUI event loop, eliminating

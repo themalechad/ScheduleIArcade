@@ -35,7 +35,7 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
         ("Pinball Machine 02", "Pinball Machine 2"),
         ("Pinball Machine 03", "Pinball Machine 3"),
         ("Pinball Machine 04", "Pinball Machine 4"),
-        ("Table Top", "Pac-Man Cocktail Table"),
+        (Constants.CabinetPrefix + "PACMAN", "Pac-Man Cocktail Table"),
         ("Air Hockey", "Air Hockey Table")
     };
 
@@ -510,12 +510,14 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
         if (!_carrying || _activeAsset == null)
             return;
 
-        EnsureHudIcon();
         float slotX = Screen.width / 2f - 38f;
         float slotY = Screen.height - 178f;
         GUI.Box(new Rect(slotX, slotY, 76f, 76f), string.Empty);
-        if (_hudIcon != null)
-            GUI.DrawTexture(new Rect(slotX + 10f, slotY + 8f, 56f, 46f), _hudIcon, ScaleMode.ScaleToFit, true);
+        // GUI.Box/Label are used by the game's own HUD and are safe in this IL2CPP build. The
+        // DrawTexture overload used here previously is the one that repeatedly threw
+        // "Method unstripping failed" while an item was carried, so the held slot intentionally
+        // uses a textual furniture marker instead of a dynamically-created texture icon.
+        GUI.Label(new Rect(slotX + 8f, slotY + 15f, 60f, 20f), "MACHINE");
         GUI.Label(new Rect(slotX + 52f, slotY + 50f, 20f, 20f), "1");
         GUI.Box(new Rect(Screen.width / 2f - 180f, slotY - 36f, 360f, 32f), $"Held item: {_activeAsset.DisplayName} x1");
 

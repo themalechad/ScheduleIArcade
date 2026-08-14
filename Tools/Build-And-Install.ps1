@@ -222,7 +222,9 @@ Write-Step "Compiling ScheduleIArcade.dll"
 if (Test-Path $OutDir) { Remove-Item $OutDir -Recurse -Force }
 New-Item $OutDir -ItemType Directory -Force | Out-Null
 
-$sourceFiles = Get-ChildItem $SourceRoot -Recurse -Filter "*.cs" -File | Sort-Object FullName
+$sourceFiles = Get-ChildItem $SourceRoot -Recurse -Filter "*.cs" -File |
+    Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
+    Sort-Object FullName
 if ($sourceFiles.Count -eq 0) { throw "No C# source files found under $SourceRoot" }
 
 $rspLines = New-Object System.Collections.Generic.List[string]

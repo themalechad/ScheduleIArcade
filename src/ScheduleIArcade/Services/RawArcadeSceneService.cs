@@ -44,10 +44,10 @@ internal sealed class RawArcadeSceneService : IDisposable
     //   red    = double doors cut into the NORTH-WEST CHAMFER wall itself
     // Props are re-centered onto their own pivots before these transforms are applied, so moving
     // them never makes them orbit around the original FBX scene origin.
-    private static readonly Vector3 RequestedPinballCenter = new(-2.53f, 0.745f, 0.05f);
-    private const float RequestedPinballYaw = 90f;
+    private static readonly Vector3 RequestedPinballCenter = new(-2.67f, 0.745f, 0.05f);
+    private const float RequestedPinballYaw = 180f;
     private static readonly Vector3 RequestedArcadeCabinetCenter = new(-2.00f, 0.779f, -3.58f);
-    private const float RequestedArcadeCabinetYaw = 180f;
+    private const float RequestedArcadeCabinetYaw = 90f;
     private static readonly Vector3 RequestedPacmanCenter = new(0.00f, 0.317f, 0.00f);
     private const float RequestedPacmanYaw = 90f;
     private const float RequestedChamferDoorT = 0.53f;
@@ -103,6 +103,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             // collidable walls using a clean slice of the original environment texture atlas so
             // the runtime test room is a complete interior instead of looking out into the sky.
             CreateMissingWalls(root.transform);
+            CreateStreetFighterDoorInfill(root.transform);
 
             // Add a visible checkerboard overlay floor that is slightly larger than the source
             // floor and the generated edge strips. This hides any remaining seams and gives the
@@ -119,6 +120,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             // while facing north-west preserves that heading into the arcade.
             CreateInteriorPolish(root.transform);
             CreateInteractiveArcadeTv(root.transform);
+            CreatePacmanTableScreen(root.transform);
             CreateActualDoorMarkers(root.transform, out spawnMarker, out exitMarker);
 
             // The downloaded scene has one actual upright arcade cabinet. Turn that cabinet into
@@ -280,6 +282,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         _meshes.Add(mesh);
 
         bool isArcadeCabinet = modelName.StartsWith("Arcade Machine", StringComparison.OrdinalIgnoreCase);
+        bool isPacmanCocktail = modelName.Equals("Table Top", StringComparison.OrdinalIgnoreCase);
         string runtimeName = modelName;
         if (isArcadeCabinet)
         {
@@ -288,6 +291,10 @@ internal sealed class RawArcadeSceneService : IDisposable
             if (!int.TryParse(suffix, out cabinetNumber) || cabinetNumber <= 0)
                 cabinetNumber = 1;
             runtimeName = Constants.CabinetPrefix + cabinetNumber.ToString("00");
+        }
+        else if (isPacmanCocktail)
+        {
+            runtimeName = Constants.CabinetPrefix + "PACMAN";
         }
 
         var go = new GameObject(runtimeName);
@@ -631,6 +638,34 @@ internal sealed class RawArcadeSceneService : IDisposable
         // Keep the source east wall/window assembly visible. Earlier builds removed a broad
         // triangle region and covered it with an oversized purple cube, blocking the real windows
         // and adjacent art. The invisible east collision shell still seals the room physically.
+    }
+
+    private void CreateStreetFighterDoorInfill(Transform parent)
+    {
+        // The source door was a separate east-wall component that also filled a real opening in
+        // the background mesh. Moving it to the right exposed that former left-hand opening.
+        // Restore the exact old aperture with a finished, atlas-compatible wall panel and frame;
+        // the moved door and the Street Fighter mural remain independent and unmirrored.
+        Material? fill = CreateWallFillMaterial();
+        if (fill == null)
+            return;
+
+        Vector3 center = new(FX(2.52f) - 0.055f, 0.99f, FZ(2.332f));
+        Vector3 panelSize = new(FSX(0.12f), 1.93f, FSZ(1.04f));
+        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorInfill", parent, center, panelSize, Quaternion.identity, fill);
+
+        Material frame = CreateSolidMaterial(
+            "ScheduleIArcade_M_StreetFighterInfillFrame",
+            new Color(0.025f, 0.035f, 0.065f, 1f),
+            0.18f,
+            0.38f);
+        float width = panelSize.z;
+        float height = panelSize.y;
+        float x = center.x - panelSize.x * 0.5f - 0.006f;
+        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameTop", parent, new Vector3(x, center.y + height * 0.5f, center.z), new Vector3(0.045f, 0.075f, width + 0.11f), Quaternion.identity, frame);
+        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameBottom", parent, new Vector3(x, center.y - height * 0.5f, center.z), new Vector3(0.045f, 0.075f, width + 0.11f), Quaternion.identity, frame);
+        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameNorth", parent, new Vector3(x, center.y, center.z + width * 0.5f), new Vector3(0.045f, height + 0.14f, 0.075f), Quaternion.identity, frame);
+        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameSouth", parent, new Vector3(x, center.y, center.z - width * 0.5f), new Vector3(0.045f, height + 0.14f, 0.075f), Quaternion.identity, frame);
     }
 
     private void CreateWallSegment(string name, Transform parent, Vector3 localA, Vector3 localB, float height, float thickness, Material? material)
@@ -1415,10 +1450,10 @@ internal sealed class RawArcadeSceneService : IDisposable
             var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
             screen.name = Constants.ScreenPrefix + suffix;
             screen.transform.SetParent(cabinet, false);
-            // The authored cabinet faces are local +Z after the cabinet roots are corrected.
-            // Put the interactive image on that same player-facing side without flipping it.
-            screen.transform.localPosition = new Vector3(0.00f, 0.30f, 0.30f);
-            screen.transform.localRotation = Quaternion.identity;
+            // The imported cabinet screen/front is local -X. The root yaw points that face north
+            // into the aisle, so keep the helper display on the real screen plane as well.
+            screen.transform.localPosition = new Vector3(-0.30f, 0.30f, 0.00f);
+            screen.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
             screen.transform.localScale = new Vector3(0.50f, 0.40f, 1f);
 
             var renderer = screen.GetComponent<Renderer>();
@@ -1427,6 +1462,36 @@ internal sealed class RawArcadeSceneService : IDisposable
 
             // Keep the collider: aiming at either monitor resolves to that cabinet parent.
         }
+    }
+
+    private void CreatePacmanTableScreen(Transform root)
+    {
+        Transform? table = FindDeepChild(root, Constants.CabinetPrefix + "PACMAN");
+        if (table == null)
+            return;
+
+        MeshFilter? filter = table.GetComponent<MeshFilter>();
+        if (filter == null || filter.sharedMesh == null)
+            return;
+
+        Bounds bounds = filter.sharedMesh.bounds;
+        var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        screen.name = Constants.ScreenPrefix + "PACMAN";
+        screen.transform.SetParent(table, false);
+        screen.transform.localPosition = new Vector3(bounds.center.x, bounds.max.y + 0.012f, bounds.center.z);
+        // The cocktail display lies horizontally. Its +Y texture axis maps toward the table's
+        // player side so the overhead interaction camera reads score text normally.
+        screen.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+        screen.transform.localScale = new Vector3(
+            Mathf.Max(0.64f, bounds.size.x * 0.82f),
+            Mathf.Max(0.82f, bounds.size.z * 0.82f),
+            1f);
+
+        Renderer? renderer = screen.GetComponent<Renderer>();
+        if (renderer != null)
+            renderer.sharedMaterial = CreateUnlitTextureMaterial("Bright_map.jpg", "ScheduleIArcade_M_PacmanCocktailScreen");
+
+        MelonLogger.Msg("Pre-placed Pac-Man cocktail table is interactive: aim at its top and press E to play.");
     }
 
     private Material CreateUnlitTextureMaterial(string textureName, string materialName)

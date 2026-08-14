@@ -35,14 +35,15 @@ TEXTURES = {
 
 # Runtime M2.38 fallback targets, converted Unity (x,y,z) -> Blender (x,-z,y).
 TARGETS = {
-    # The exported runtime yaw is the inverse of Blender Z yaw. Pinball backs now sit against
-    # the west wall, and upright screens face into the room instead of into the south wall.
-    'Pinball Machine 01': ((-2.79,  1.55, 0.745), 90.0),
-    'Pinball Machine 02': ((-2.79,  0.52, 0.745), 90.0),
-    'Pinball Machine 03': ((-2.79, -0.52, 0.745), 90.0),
-    'Pinball Machine 04': ((-2.79, -1.55, 0.745), 90.0),
-    'Arcade Machine 01': ((-2.34, 3.58, 0.779), 0.0),
-    'Arcade Machine 02': ((-1.66, 3.58, 0.779), 0.0),
+    # The source geometry's cabinet/pinball facing axis is local -X (not local Z). Runtime yaw
+    # is the inverse of Blender Z yaw: pinball backboxes (local +X) therefore point west at 180°,
+    # while upright screens (local -X) point north into the room at +90°.
+    'Pinball Machine 01': ((-2.67,  1.55, 0.745), -180.0),
+    'Pinball Machine 02': ((-2.67,  0.52, 0.745), -180.0),
+    'Pinball Machine 03': ((-2.67, -0.52, 0.745), -180.0),
+    'Pinball Machine 04': ((-2.67, -1.55, 0.745), -180.0),
+    'Arcade Machine 01': ((-2.34, 3.58, 0.779), -90.0),
+    'Arcade Machine 02': ((-1.66, 3.58, 0.779), -90.0),
     'Table Top': ((0.00, 0.00, 0.317), -90.0),
 }
 

@@ -1,16 +1,16 @@
-"""Apply the M2.43 layout corrections to an existing editable arcade blend without rebuilding it."""
+"""Apply the M2.44 layout corrections to an existing editable arcade blend without rebuilding it."""
 import bpy
 import bmesh
 import math
 
 
 TARGET_YAWS = {
-    'Pinball Machine 01': 90.0,
-    'Pinball Machine 02': 90.0,
-    'Pinball Machine 03': 90.0,
-    'Pinball Machine 04': 90.0,
-    'Arcade Machine 01': 0.0,
-    'Arcade Machine 02': 0.0,
+    'Pinball Machine 01': -180.0,
+    'Pinball Machine 02': -180.0,
+    'Pinball Machine 03': -180.0,
+    'Pinball Machine 04': -180.0,
+    'Arcade Machine 01': -90.0,
+    'Arcade Machine 02': -90.0,
 }
 
 
@@ -57,6 +57,10 @@ for name, yaw in TARGET_YAWS.items():
     if obj is None:
         raise RuntimeError(f'Missing required arcade prop: {name}')
     obj.rotation_euler = (0.0, 0.0, math.radians(yaw))
+    # Once the model's real front/back axis is used, its old origin position intersects the
+    # west wall. Move just the pinball row 12 cm into the room, yielding a small flush gap.
+    if name.startswith('Pinball Machine'):
+        obj.location.x = -2.67
 
 environment = bpy.data.objects.get('Enviorment')
 if environment is None:
@@ -64,4 +68,4 @@ if environment is None:
 move_street_fighter_door_to_right(environment)
 
 bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
-print('Applied M2.43 orientation and Street Fighter door fixes to the editable Blender scene.')
+print('Applied M2.44 orientation and Street Fighter door fixes to the editable Blender scene.')

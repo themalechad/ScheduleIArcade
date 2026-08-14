@@ -1,0 +1,13 @@
+SCHEDULE I ARCADE M2.44 - FOCUSED TEST PASS
+
+1. Restart Schedule I, load a save, and enter the custom arcade through the real arcade entrance.
+2. Inspect the Street Fighter wall: the old left door position must be a finished solid wall panel;
+   the door must remain on the right and the mural must not be mirrored.
+3. Inspect the west row: all four pinball backboxes face the wall and all playfields face the aisle.
+4. Inspect the south row: both upright cabinet screens and controls face into the room.
+5. Aim at the Pac-Man cocktail table top. The prompt must read "[E] Play Pac-Man".
+6. Press E: the camera must lock above the tabletop, movement/hotbar/phone shortcuts must not act,
+   and the game must be upright. Arrow keys move; Tab pauses; Escape exits the session.
+7. Pick up any custom machine. Confirm the normal-style held slot appears without repeating
+   "Method unstripping failed" errors. Place it on the extended arcade grid near a wall.
+8. Confirm a green placement ghost places normally and a red ghost only appears for a true collision.

@@ -6,9 +6,9 @@ using UnityEngine;
 namespace ScheduleIArcade.Services;
 
 /// <summary>
-/// Owns the native-style modal state while the custom TV is being played. The TV game continues
-/// to use legacy arrow/TAB/ESC input, while Schedule I's PlayerInput action map is paused so the
-/// phone, hotbar and gameplay hotkeys cannot react underneath it.
+/// Owns the native-style modal state while a custom screen is being played. Games continue to use
+/// legacy arrow/TAB/ESC input, while Schedule I's PlayerInput action map is paused so the phone,
+/// hotbar and gameplay hotkeys cannot react underneath them.
 /// </summary>
 internal sealed class ArcadeTvViewService
 {
@@ -46,12 +46,12 @@ internal sealed class ArcadeTvViewService
             LockMovementAndFrameCamera(cabinet);
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-            MelonLogger.Msg("TV session entered native-style screen mode: camera framed, player/hotbar/phone controls locked.");
+            MelonLogger.Msg($"{cabinet.Id} session entered native-style screen mode: camera framed, player/hotbar/phone controls locked.");
         }
         catch (Exception ex)
         {
             // Never leave the player trapped if an optional UI object changed in a game update.
-            MelonLogger.Warning($"TV screen mode partially unavailable; keeping the playable TV session safe: {ex.Message}");
+            MelonLogger.Warning($"Arcade screen mode partially unavailable; keeping the playable session safe: {ex.Message}");
         }
     }
 
@@ -178,15 +178,31 @@ internal sealed class ArcadeTvViewService
 
         Transform root = cabinet.Root.transform;
         Vector3 screenCenter = cabinet.ScreenRenderer.bounds.center;
-        Vector3 viewingDirection = root.TransformDirection(Vector3.back).normalized;
-        Vector3 cameraPosition = screenCenter + viewingDirection * 0.78f + Vector3.up * 0.015f;
-        Quaternion cameraRotation = Quaternion.LookRotation(screenCenter - cameraPosition, Vector3.up);
+        bool cocktailTable = cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase);
+        Vector3 cameraPosition;
+        Quaternion cameraRotation;
+        float fov;
+        if (cocktailTable)
+        {
+            // The cocktail screen is horizontal. Lock an overhead view with its texture's top
+            // pointed toward the player, like a real two-sided Pac-Man table.
+            cameraPosition = screenCenter + Vector3.up * 1.28f;
+            cameraRotation = Quaternion.LookRotation(Vector3.down, -root.forward);
+            fov = 47f;
+        }
+        else
+        {
+            Vector3 viewingDirection = root.TransformDirection(Vector3.back).normalized;
+            cameraPosition = screenCenter + viewingDirection * 0.78f + Vector3.up * 0.015f;
+            cameraRotation = Quaternion.LookRotation(screenCenter - cameraPosition, Vector3.up);
+            fov = 40f;
+        }
 
         var camera = Il2CppScheduleOne.PlayerScripts.PlayerCamera.Instance;
         camera.AddActiveUIElement(CameraUiToken);
         camera.SetCanLook(false);
         camera.OverrideTransform(cameraPosition, cameraRotation, CameraTransitionSeconds, false);
-        camera.OverrideFOV(40f, CameraTransitionSeconds);
+        camera.OverrideFOV(fov, CameraTransitionSeconds);
         camera.LockMouse();
     }
 }
