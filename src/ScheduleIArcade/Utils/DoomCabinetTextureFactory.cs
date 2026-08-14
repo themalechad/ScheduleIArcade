@@ -190,12 +190,16 @@ internal static class DoomCabinetTextureFactory
     private static void DrawText(Color32[] pixels, string text, int x, int y, int scale, Color32 color)
     {
         int cursor = x;
-        foreach (char raw in text)
+        // The supplied stand-up mesh maps its cabinet-front U coordinates in reverse. Pre-mirror
+        // just the generated lettering so the artwork stays fitted to its existing UV islands
+        // while visible titles read normally from the player-facing side.
+        for (int textIndex = text.Length - 1; textIndex >= 0; textIndex--)
         {
+            char raw = text[textIndex];
             string glyph = Glyph(char.ToUpperInvariant(raw));
             for (int row = 0; row < 7; row++)
                 for (int column = 0; column < 5; column++)
-                    if (glyph[row * 5 + column] == '1')
+                    if (glyph[row * 5 + (4 - column)] == '1')
                         Fill(pixels, cursor + column * scale, y + (6 - row) * scale, scale, scale, color);
             cursor += 6 * scale;
         }

@@ -1441,7 +1441,9 @@ internal sealed class RawArcadeSceneService : IDisposable
             float frontX = isCabinetTwo ? 0.077f : -0.077f;
             screen.transform.localPosition = new Vector3(frontX, 0.277f, 0.00f);
             screen.transform.localRotation = Quaternion.Euler(0f, isCabinetTwo ? 90f : -90f, 0f);
-            screen.transform.localScale = new Vector3(0.34f, 0.235f, 1f);
+            // Both authored cabinet fronts face local -X after their room rotations. A Unity
+            // Quad seen from that front side needs its U axis inverted or text reads backward.
+            screen.transform.localScale = new Vector3(-0.34f, 0.235f, 1f);
 
             var renderer = screen.GetComponent<Renderer>();
             if (renderer != null)

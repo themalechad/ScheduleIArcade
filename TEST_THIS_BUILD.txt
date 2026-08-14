@@ -1,8 +1,8 @@
-SCHEDULE I ARCADE M2.50 - EXTERNAL DOOM CABINETS
+SCHEDULE I ARCADE M2.51 - DOOM SCREEN ORIENTATION
 
-See TEST_M2.50.txt for the complete focused test flow.
+See TEST_M2.51.txt for the complete focused test flow.
 
 Quick check:
-1. Restart Schedule I so both separately installed Doom TV mods load.
-2. Use each matching stand-up cabinet and confirm it shows the appropriate Doom game.
-3. Temporarily make a required Doom WAD unavailable, restart, and confirm that cabinet shows TEST MODE instead.
+1. Use DOOM I and DOOM II cabinets.
+2. Confirm each camera frames its CRT face and live game output.
+3. Confirm all visible DOOM I / DOOM II titles read left-to-right.

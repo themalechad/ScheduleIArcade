@@ -176,7 +176,6 @@ internal sealed class ArcadeTvViewService
         if (!Il2CppScheduleOne.PlayerScripts.PlayerCamera.InstanceExists)
             return;
 
-        Transform root = cabinet.Root.transform;
         Vector3 screenCenter = cabinet.ScreenRenderer.bounds.center;
         bool cocktailTable = cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase);
         Vector3 cameraPosition;
@@ -187,17 +186,21 @@ internal sealed class ArcadeTvViewService
             // The cocktail screen is horizontal. Lock an overhead view with its texture's top
             // pointed toward the player, like a real two-sided Pac-Man table.
             cameraPosition = screenCenter + Vector3.up * 1.28f;
-            cameraRotation = Quaternion.LookRotation(Vector3.down, -root.forward);
+            cameraRotation = Quaternion.LookRotation(Vector3.down, -cabinet.Root.transform.forward);
             fov = 47f;
         }
         else
         {
-            Vector3 viewingDirection = root.TransformDirection(Vector3.back).normalized;
-            // Keep the complete TV bezel and console in frame. The previous close distance made
-            // the screen fill the view too aggressively for a relaxed in-room arcade session.
-            cameraPosition = screenCenter + viewingDirection * 1.30f + Vector3.up * 0.06f;
+            // Upright cabinet meshes do not all share one root-facing axis. The fitted display
+            // is the reliable source of truth: place the player on its rendered/front side,
+            // never at a hard-coded root back direction. This keeps the Doom view at the CRT
+            // instead of its cabinet side or outside the room.
+            Vector3 viewingDirection = cabinet.ScreenRenderer.transform.forward.normalized;
+            if (viewingDirection.sqrMagnitude < 0.01f)
+                viewingDirection = cabinet.Root.transform.forward;
+            cameraPosition = screenCenter + viewingDirection * 1.10f + Vector3.up * 0.04f;
             cameraRotation = Quaternion.LookRotation(screenCenter - cameraPosition, Vector3.up);
-            fov = 54f;
+            fov = 56f;
         }
 
         var camera = Il2CppScheduleOne.PlayerScripts.PlayerCamera.Instance;

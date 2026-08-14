@@ -1,4 +1,13 @@
-# Schedule I Arcade M2.50
+# Schedule I Arcade M2.51
+
+M2.51 frames every upright cabinet from its actual fitted CRT face instead of assuming a shared
+root-facing axis. This puts the Doom play view directly in front of the correct monitor rather than
+at a cabinet side or outside the arcade. The Doom cabinet atlas lettering and fitted CRT U axis are
+now mirrored for the supplied mesh UVs, so DOOM I and DOOM II read normally from the player side.
+
+See TEST_M2.51.txt for the focused regression pass.
+
+## M2.50
 
 M2.50 connects the two stand-up cabinets to their matching separately installed Doom TV mods
 without packaging, loading, or redistributing either mod or its WAD. Cabinet 1 runs the live

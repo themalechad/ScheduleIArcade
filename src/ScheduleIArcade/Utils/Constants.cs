@@ -3,7 +3,7 @@ namespace ScheduleIArcade.Utils;
 internal static class Constants
 {
     public const string ModName = "Schedule I Arcade";
-    public const string ModVersion = "0.2.50-external-doom-cabinets";
+    public const string ModVersion = "0.2.51-doom-screen-orientation";
     public const string ModAuthor = "GrandmasAnkles/XUnfairX";
     public const string PreferencesCategory = "ScheduleIArcade";
 
