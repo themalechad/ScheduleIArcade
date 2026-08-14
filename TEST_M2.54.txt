@@ -1,0 +1,10 @@
+SCHEDULE I ARCADE M2.54 - TILTED CRTS + PINBALL GLASS
+
+1. Restart Schedule I so the updated mesh layout and screen planes load.
+2. Confirm Doom I and Doom II have themed cabinet art again, with no flipped painted lettering.
+3. Confirm both live Doom screens sit on the cabinets' tilted fake-screen glass. The entire display must be visible, readable, and clear of the fake monitor mesh.
+4. Confirm Doom II's readable display title is red while its cabinet remains green-themed.
+5. Confirm pinballs 3 and 4 are rotated toward the room beside the Doom cabinets, with their backs against the wall and no collisions.
+6. Confirm every playable Space Cadet display is laid directly across the sloped glass/playfield, not vertically above the machine.
+7. Launch the pinball and play several turns. Confirm the ball movement is smooth, rolls at a calmer pace, and remains controllable with the flippers.
+8. Press ESC from Doom, pinball, and TV sessions to confirm control is restored.

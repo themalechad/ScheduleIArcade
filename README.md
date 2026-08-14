@@ -1,4 +1,18 @@
-# Schedule I Arcade M2.53
+# Schedule I Arcade M2.54
+
+M2.54 seats the Doom displays on the cabinets' measured, upward-tilted CRT planes, 9 mm above
+the fake source monitor so the entire playable display is visible but still reads as flush glass.
+The themed Doom cabinet textures return without UV-mapped wording; readable Doom I / II labels live
+only on the correctly oriented active display.
+
+All pinball game screens now lie directly on the measured sloped playfield glass. Pinballs 3 and 4
+rotate toward the player in the Doom-machine row, keeping their backboxes against the wall. The
+pinball simulation now runs at a finer physics rate with gentler gravity, launches, flipper kicks,
+bumper kicks, and speed cap for a smoother, more natural ball.
+
+See TEST_M2.54.txt for the focused regression pass.
+
+## M2.53
 
 M2.53 removes the generated full-cabinet Doom texture atlases completely. The cabinets are now
 plain green physical shells, their live CRTs sit ahead of the old painted monitor geometry, and

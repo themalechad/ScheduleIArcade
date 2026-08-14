@@ -68,8 +68,9 @@ internal static class DoomCabinetTextureFactory
         Fill(pixels, x, y, width, height, Ink);
         Frame(pixels, x, y, width, height, edge, glow);
         DrawFlames(pixels, x + 8, y + 6, width - 16, height - 12, edge, glow, sequel);
-        DrawTextCentered(pixels, title, x + width / 2, y + height / 2 - 22, 7, Ink, 2);
-        DrawTextCentered(pixels, title, x + width / 2, y + height / 2 - 21, 7, glow, 0);
+        // Titles belong on the separately fitted runtime CRT. The source model mirrors several
+        // UV islands, so omitting lettering here keeps the physical themed texture readable on
+        // every panel while avoiding reversed painted text.
     }
 
     private static void DrawHeroPanel(Color32[] pixels, int x, int y, int width, int height, string title, Color32 glow, Color32 edge, bool sequel)
@@ -78,9 +79,6 @@ internal static class DoomCabinetTextureFactory
         Frame(pixels, x, y, width, height, edge, glow);
         DrawFlames(pixels, x + 5, y + 5, width - 10, height - 10, edge, glow, sequel);
         DrawDemonHelmet(pixels, x + width / 2, y + 112, sequel ? glow : Orange, edge);
-        DrawTextCentered(pixels, title, x + width / 2, y + 184, 6, Ink, 2);
-        DrawTextCentered(pixels, title, x + width / 2, y + 185, 6, Bone, 0);
-        DrawTextCentered(pixels, sequel ? "HELL ON EARTH" : "KNEE DEEP IN HELL", x + width / 2, y + 16, 3, Bone, 0);
         Rivets(pixels, x + 9, y + 9, width - 18, height - 18);
     }
 
@@ -88,15 +86,12 @@ internal static class DoomCabinetTextureFactory
     {
         Fill(pixels, x, y, width, height, Steel);
         Frame(pixels, x, y, width, height, edge, glow);
-        DrawTextCentered(pixels, title, x + width / 2, y + height - 36, 5, Ink, 2);
-        DrawTextCentered(pixels, title, x + width / 2, y + height - 35, 5, glow, 0);
         for (int i = 0; i < 6; i++)
         {
             int px = x + 22 + i * 34;
             Fill(pixels, px, y + 32, 20, 20, Ink);
             Fill(pixels, px + 3, y + 35, 14, 14, i % 2 == 0 ? edge : glow);
         }
-        DrawTextCentered(pixels, sequel ? "RIP AND TEAR" : "ULTRA VIOLENCE", x + width / 2, y + 8, 3, Bone, 0);
     }
 
     private static void DrawSidePanel(Color32[] pixels, int x, int y, int width, int height, string title, Color32 glow, Color32 edge, bool sequel)
@@ -107,7 +102,7 @@ internal static class DoomCabinetTextureFactory
         {
             int lineY = y + 31 + row * 57;
             Fill(pixels, x + 13, lineY, width - 26, 2, glow);
-            DrawTextCentered(pixels, title, x + width / 2, lineY + 9, 5, glow, 0);
+            Fill(pixels, x + 22, lineY + 11, width - 44, 8, sequel ? glow : Bone);
         }
         DrawDemonHelmet(pixels, x + width / 2, y + height / 2, sequel ? glow : Orange, edge);
         Rivets(pixels, x + 8, y + 8, width - 16, height - 16);

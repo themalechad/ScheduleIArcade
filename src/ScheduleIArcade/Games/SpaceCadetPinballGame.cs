@@ -99,7 +99,7 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         }
         else
         {
-            int steps = Mathf.Clamp(Mathf.CeilToInt(deltaTime * 120f), 1, 8);
+            int steps = Mathf.Clamp(Mathf.CeilToInt(deltaTime * 180f), 1, 10);
             float step = Mathf.Min(deltaTime, 0.05f) / steps;
             for (int i = 0; i < steps && !_waitingToLaunch; i++)
                 Simulate(step, leftPressed, rightPressed);
@@ -108,7 +108,7 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         _nextDraw -= deltaTime;
         if (_nextDraw <= 0f)
         {
-            _nextDraw = 1f / 30f;
+            _nextDraw = 1f / 45f;
             DrawFrame();
         }
     }
@@ -150,7 +150,7 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
     private void LaunchBall()
     {
         _waitingToLaunch = false;
-        _velocity = new Vector2(-88f, 625f);
+        _velocity = new Vector2(-52f, 440f);
         AddScore(250);
     }
 
@@ -163,8 +163,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         for (int i = 0; i < _targetCooldowns.Length; i++)
             _targetCooldowns[i] = Mathf.Max(0f, _targetCooldowns[i] - dt);
 
-        _velocity += new Vector2(0f, -405f) * dt;
-        _velocity *= 0.999f;
+        _velocity += new Vector2(0f, -260f) * dt;
+        _velocity *= Mathf.Pow(0.996f, dt * 60f);
         _ball += _velocity * dt;
 
         ResolveWalls();
@@ -227,7 +227,7 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
             Vector2 normal = distance > 0.001f ? offset / distance : Vector2.up;
             _ball = Bumpers[i] + normal * (radius + BallRadius);
-            _velocity = Vector2.Reflect(_velocity, normal) + normal * 155f;
+            _velocity = Vector2.Reflect(_velocity, normal) + normal * 95f;
             if (_bumperCooldowns[i] <= 0f)
             {
                 _bumperCooldowns[i] = 0.12f;
@@ -248,7 +248,7 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
             Vector2 normal = distance > 0.001f ? offset / distance : Vector2.right;
             _ball = Targets[i] + normal * (radius + BallRadius);
-            _velocity = Vector2.Reflect(_velocity, normal) + normal * 90f;
+            _velocity = Vector2.Reflect(_velocity, normal) + normal * 58f;
             if (_targetCooldowns[i] <= 0f)
             {
                 _targetCooldowns[i] = 0.28f;
@@ -266,8 +266,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
     private void ResolveSlings()
     {
-        ResolveCircle(new Vector2(63f, 138f), 20f, 140f, 120);
-        ResolveCircle(new Vector2(257f, 138f), 20f, 140f, 120);
+        ResolveCircle(new Vector2(63f, 138f), 20f, 88f, 120);
+        ResolveCircle(new Vector2(257f, 138f), 20f, 88f, 120);
 
         if (_ball.y > 397f && _ball.x > 84f && _ball.x < 236f)
         {
@@ -305,9 +305,9 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
             : new Vector2(-Mathf.Sin(radians), Mathf.Cos(radians));
         _ball = closest + normal * (BallRadius + thickness);
         _velocity = Vector2.Reflect(_velocity, normal);
-        float lift = pressed ? 630f : 145f;
-        _velocity += normal * 145f + new Vector2(left ? -48f : 48f, lift);
-        _velocity = Vector2.ClampMagnitude(_velocity, 920f);
+        float lift = pressed ? 455f : 90f;
+        _velocity += normal * 95f + new Vector2(left ? -32f : 32f, lift);
+        _velocity = Vector2.ClampMagnitude(_velocity, 640f);
         if (_flipperCooldown <= 0f)
         {
             _flipperCooldown = 0.06f;

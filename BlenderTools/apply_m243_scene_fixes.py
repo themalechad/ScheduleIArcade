@@ -7,16 +7,16 @@ import math
 TARGET_YAWS = {
     'Pinball Machine 01': -180.0,
     'Pinball Machine 02': -180.0,
-    'Pinball Machine 03': -180.0,
-    'Pinball Machine 04': -180.0,
+    'Pinball Machine 03': -90.0,
+    'Pinball Machine 04': -90.0,
     'Arcade Machine 01': -90.0,
     'Arcade Machine 02': 90.0,
 }
 
 TARGET_LOCATIONS = {
     # Keep pinballs 1/2 on the west wall, and move 3/4 beside the Doom cabinets.
-    'Pinball Machine 03': (-0.65, 3.58, 0.745),
-    'Pinball Machine 04': (0.45, 3.58, 0.745),
+    'Pinball Machine 03': (-0.65, 3.47, 0.745),
+    'Pinball Machine 04': (0.45, 3.47, 0.745),
 }
 
 

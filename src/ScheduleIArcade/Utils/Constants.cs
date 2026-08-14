@@ -3,7 +3,7 @@ namespace ScheduleIArcade.Utils;
 internal static class Constants
 {
     public const string ModName = "Schedule I Arcade";
-    public const string ModVersion = "0.2.53-clean-doom-crts";
+    public const string ModVersion = "0.2.54-tilted-screens-pinball-glass";
     public const string ModAuthor = "GrandmasAnkles/XUnfairX";
     public const string PreferencesCategory = "ScheduleIArcade";
 

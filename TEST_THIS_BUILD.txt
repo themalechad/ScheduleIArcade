@@ -1,8 +1,8 @@
-SCHEDULE I ARCADE M2.53 - CLEAN DOOM CRTS + TV VIEW
+SCHEDULE I ARCADE M2.54 - TILTED CRTS + PINBALL GLASS
 
-See TEST_M2.53.txt for the complete focused test flow.
+See TEST_M2.54.txt for the complete focused test flow.
 
 Quick check:
-1. Confirm both Doom cabinets have plain green bodies and unobstructed CRTs.
-2. Confirm Doom II text is red and reads normally.
-3. Play the Arcade TV and confirm its camera frames the screen, not the wall behind it.
+1. Confirm both Doom CRTs are fully visible within their tilted physical bezels.
+2. Confirm every pinball display is on its sloped playfield glass.
+3. Confirm the pinball ball is smooth and controllable rather than too fast.

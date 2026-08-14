@@ -1430,22 +1430,23 @@ internal sealed class RawArcadeSceneService : IDisposable
 
             Renderer? cabinetRenderer = cabinet.GetComponent<Renderer>();
             if (cabinetRenderer != null)
-                cabinetRenderer.sharedMaterial = CreateDoomCabinetFrameMaterial(index);
+                cabinetRenderer.sharedMaterial = CreateDoomCabinetMaterial(index);
 
             var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
             screen.name = Constants.ScreenPrefix + suffix;
             screen.transform.SetParent(cabinet, false);
-            // The imported split cabinets have opposite authored fronts. Their monitor faces are
-            // inset around X=+/-0.075 (not at the +/-0.26 collision-shell edge). Place the
-            // screen 8 mm proud of that plane, in front of the old painted monitor polygons,
-            // so the live CRT can never be covered by those source-mesh textures.
+            // The imported CRT face is a shallow upward tilt, not a vertical plane. Match that
+            // physical glass angle and sit just above it so the full playable image remains
+            // flush and cannot disappear behind the source mesh's fake monitor geometry.
             bool isCabinetTwo = index == 2;
-            float frontX = isCabinetTwo ? 0.083f : -0.083f;
-            screen.transform.localPosition = new Vector3(frontX, 0.277f, 0.00f);
-            screen.transform.localRotation = Quaternion.Euler(0f, isCabinetTwo ? 90f : -90f, 0f);
-            // Both authored cabinet fronts face local -X after their room rotations. A Unity
-            // Quad seen from that front side needs its U axis inverted or text reads backward.
-            screen.transform.localScale = new Vector3(-0.34f, 0.235f, 1f);
+            Vector3 faceNormal = isCabinetTwo
+                ? new Vector3(0.937f, 0.348f, 0f)
+                : new Vector3(-0.937f, 0.348f, 0f);
+            Vector3 faceCenter = new Vector3(isCabinetTwo ? 0.075f : -0.075f, 0.277f, 0f);
+            screen.transform.localPosition = faceCenter + faceNormal * 0.009f;
+            screen.transform.localRotation = Quaternion.LookRotation(faceNormal, Vector3.up);
+            // The mesh's front-facing U direction is reversed on both authored split cabinets.
+            screen.transform.localScale = new Vector3(-0.35f, 0.245f, 1f);
 
             var renderer = screen.GetComponent<Renderer>();
             if (renderer != null)
@@ -1469,14 +1470,19 @@ internal sealed class RawArcadeSceneService : IDisposable
         }
     }
 
-    private Material CreateDoomCabinetFrameMaterial(int index)
+    private Material CreateDoomCabinetMaterial(int index)
     {
-        // Do not retexture the full source mesh: its UV islands include painted monitor
-        // geometry that can draw over the runtime CRT. Keep only a plain green cabinet shell.
-        Color frameGreen = index == 2
-            ? new Color32(20, 76, 42, 255)
-            : new Color32(24, 92, 49, 255);
-        return CreateDoorMaterial(frameGreen, "ScheduleIArcade_M_DoomCabinetFrame" + index);
+        bool sequel = index == 2;
+        string textureKey = "__arcade_doom_cabinet_" + index;
+        Material material = CreateUnlitTextureMaterial(string.Empty, "ScheduleIArcade_M_DoomCabinet" + index);
+        Texture2D texture = DoomCabinetTextureFactory.Create(
+            "ScheduleIArcade_DoomCabinet" + index,
+            sequel);
+        _textures[textureKey] = texture;
+        if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
+        if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+        if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
+        return material;
     }
 
     private void CreatePacmanTableScreen(Transform root)
@@ -1533,14 +1539,14 @@ internal sealed class RawArcadeSceneService : IDisposable
             screen.name = Constants.ScreenPrefix + suffix;
             screen.transform.SetParent(machine, false);
 
-            // The pinball meshes' local +X side is the wall-facing backbox. Mount the game
-            // display on the opposite/front face, tightly inside the physical backbox bounds.
-            screen.transform.localPosition = new Vector3(
-                bounds.min.x - 0.006f,
-                bounds.min.y + bounds.size.y * 0.69f,
-                bounds.center.z);
-            screen.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
-            screen.transform.localScale = new Vector3(0.42f, 0.56f, 1f);
+            // Match the real sloped playfield glass: it rises toward the backbox (+X), while
+            // its front/up normal points toward the player. The portrait screen now lives on
+            // the physical glass instead of standing vertically over the machine.
+            Vector3 glassNormal = new Vector3(-0.148f, 0.989f, 0f);
+            Vector3 glassCenter = new Vector3(-0.10f, 0.012f, bounds.center.z);
+            screen.transform.localPosition = glassCenter + glassNormal * 0.007f;
+            screen.transform.localRotation = Quaternion.LookRotation(glassNormal, Vector3.right);
+            screen.transform.localScale = new Vector3(0.40f, 0.60f, 1f);
 
             Renderer? renderer = screen.GetComponent<Renderer>();
             if (renderer != null)
