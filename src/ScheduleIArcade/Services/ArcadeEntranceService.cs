@@ -269,18 +269,16 @@ internal sealed class ArcadeEntranceService : IDisposable
 
         EnsureFallbackMouseFree();
 
-        const float width = 340f;
-        const float height = 150f;
-        float x = (Screen.width - width) * 0.5f;
-        float y = (Screen.height - height) * 0.5f;
-
-        GUI.Box(new Rect(x, y, width, height), "Arcade");
-        GUI.Label(new Rect(x + 20f, y + 34f, width - 40f, 30f), "Enter the arcade?");
-
-        if (GUI.Button(new Rect(x + 20f, y + 72f, width - 40f, 30f), "Enter Arcade"))
+        ArcadePromptUi.Choice choice = ArcadePromptUi.DrawChoiceCard(
+            "ARCADE ENTRANCE",
+            "ENTER THE ARCADE?",
+            "Open the custom arcade interior through this door.",
+            "ENTER ARCADE",
+            "CANCEL",
+            new Color(0.15f, 0.78f, 1.0f, 1f));
+        if (choice == ArcadePromptUi.Choice.Primary)
             EnterArcade();
-
-        if (GUI.Button(new Rect(x + 20f, y + 109f, width - 40f, 24f), "Cancel"))
+        else if (choice == ArcadePromptUi.Choice.Secondary)
             CancelFallbackChoice();
     }
 
@@ -361,7 +359,9 @@ internal sealed class ArcadeEntranceService : IDisposable
         // Keep this separate from the front-door return point so the interior door behaves like
         // a real second exit instead of snapping the player back to the entrance.
         return CompleteExit(
-            new Vector3(-59.9f, -3.0f, 146.1f),
+            // Shift back 1.25m from the original west-facing anchor. The previous point put
+            // the player too far forward of the real rear door after controller alignment.
+            new Vector3(-58.65f, -3.0f, 146.1f),
             "Exited the custom arcade through the rear door to the west side of the building.",
             -90f);
     }

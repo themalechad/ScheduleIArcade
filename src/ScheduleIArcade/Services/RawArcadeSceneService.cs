@@ -676,7 +676,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         // close-range look interaction in ArcadeExitInteractionService.
         var marker = new GameObject(Constants.BackExitMarkerName);
         marker.transform.SetParent(parent, false);
-        marker.transform.localPosition = new Vector3(FX(2.52f) - 0.28f, 0.95f, FZ(-2.30f));
+        marker.transform.localPosition = new Vector3(FX(2.52f) - 0.28f, 1.45f, FZ(-2.30f));
         marker.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
     }
 
@@ -1202,7 +1202,9 @@ internal sealed class RawArcadeSceneService : IDisposable
 
         var exit = new GameObject(Constants.ExitMarkerName);
         exit.transform.SetParent(parent, false);
-        exit.transform.localPosition = doorCenter + inward * 0.48f + Vector3.up * 0.95f;
+        // Keep the invisible interaction point at natural eye level. At knee height it forced
+        // players to look down just to use the exit, unlike the machine prompts in the room.
+        exit.transform.localPosition = doorCenter + inward * 0.48f + Vector3.up * 1.45f;
         exitMarker = exit.transform;
 
         CreatePointLight(parent, doorCenter + inward * 0.80f + Vector3.up * 1.75f, 3.6f, 0.80f);

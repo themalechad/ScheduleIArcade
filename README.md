@@ -1,4 +1,15 @@
-# Schedule I Arcade M2.46
+# Schedule I Arcade M2.47
+
+M2.47 guarantees that Pac-Man's small route pellets stay visible on the in-world screen, even when
+the supplied source sprite's dark edge pixels are downscaled. Exit hotspots are now at natural eye
+height and measure closeness along the floor, so players can use a door while looking straight at it.
+The west-side return is shifted 1.25m backward to land beside the real rear door rather than ahead of
+it. The exterior fallback choice now uses the same high-contrast arcade-card treatment as interior
+machine and exit prompts.
+
+See `TEST_M2.47.txt` for the focused regression pass.
+
+## M2.46
 
 M2.46 makes exit interaction deliberate: a prompt appears only when the player is close and looking
 directly at the matching doorway. The Street Fighter mural door is now a second exit. Aimed interaction

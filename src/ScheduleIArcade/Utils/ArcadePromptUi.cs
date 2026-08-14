@@ -8,6 +8,13 @@ namespace ScheduleIArcade.Utils;
 /// </summary>
 internal static class ArcadePromptUi
 {
+    internal enum Choice
+    {
+        None,
+        Primary,
+        Secondary
+    }
+
     private static GUIStyle? _titleStyle;
     private static GUIStyle? _actionStyle;
     private static GUIStyle? _detailStyle;
@@ -33,6 +40,34 @@ internal static class ArcadePromptUi
         GUI.Label(new Rect(x + 16f, y + 29f, width - 32f, 26f), action, _actionStyle);
         GUI.Label(new Rect(x + 16f, y + 54f, width - 32f, 17f), detail, _detailStyle);
         GUI.color = previous;
+    }
+
+    /// <summary>Draws the exterior arcade-entry fallback using the same visual language as room prompts.</summary>
+    public static Choice DrawChoiceCard(string title, string action, string detail, string primary, string secondary, Color accent)
+    {
+        EnsureStyles();
+        if (_titleStyle == null || _actionStyle == null || _detailStyle == null)
+            return Choice.None;
+
+        float width = Mathf.Min(510f, Screen.width - 36f);
+        const float height = 166f;
+        float x = (Screen.width - width) * 0.5f;
+        float y = (Screen.height - height) * 0.5f;
+        Color previous = GUI.color;
+
+        GUI.color = new Color(0.015f, 0.025f, 0.06f, 0.97f);
+        GUI.Box(new Rect(x, y, width, height), string.Empty);
+        GUI.color = accent;
+        GUI.Box(new Rect(x, y, width, 4f), string.Empty);
+        GUI.color = Color.white;
+        GUI.Label(new Rect(x + 16f, y + 13f, width - 32f, 20f), title, _titleStyle);
+        GUI.Label(new Rect(x + 16f, y + 38f, width - 32f, 26f), action, _actionStyle);
+        GUI.Label(new Rect(x + 16f, y + 65f, width - 32f, 20f), detail, _detailStyle);
+
+        bool primaryClicked = GUI.Button(new Rect(x + 16f, y + 97f, width - 32f, 28f), primary);
+        bool secondaryClicked = GUI.Button(new Rect(x + 16f, y + 132f, width - 32f, 22f), secondary);
+        GUI.color = previous;
+        return primaryClicked ? Choice.Primary : secondaryClicked ? Choice.Secondary : Choice.None;
     }
 
     private static void EnsureStyles()

@@ -77,7 +77,10 @@ internal sealed class ArcadeExitInteractionService
         if (camera == null)
             return false;
 
+        // Player.Position is foot-aligned while the exit hotspot is at eye level. Range should
+        // measure floor distance, otherwise lifting the hotspot would shrink its usable radius.
         Vector3 toMarkerFromPlayer = marker.position - player.Position;
+        toMarkerFromPlayer.y = 0f;
         if (toMarkerFromPlayer.sqrMagnitude > maximumDistance * maximumDistance)
             return false;
 

@@ -501,8 +501,10 @@ internal sealed class PacmanCocktailGame : IArcadeGame
                 {
                     if (_sourcePellet != null)
                         DrawSourceImage(_sourcePellet, px + 3, py + 3, 3, 3);
-                    else
-                        FillRect(px + 4, py + 4, 2, 2, White);
+                    // Always stamp a high-contrast two-pixel centre after source art. Some
+                    // source-pack pellets have nearly opaque dark edge pixels at this scale,
+                    // which made the pellet path disappear on the in-world table display.
+                    FillRect(px + 3, py + 3, 2, 2, new Color32(255, 228, 184, 255));
                 }
             }
         }

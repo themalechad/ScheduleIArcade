@@ -1,9 +1,9 @@
-SCHEDULE I ARCADE M2.46 - PAC-MAN, DISPLAYS, AND DOOR TARGETING
+SCHEDULE I ARCADE M2.47 - PELLETS, EYE-LEVEL EXITS, AND ENTRY PROMPT
 
-See TEST_M2.46.txt for the complete focused test flow.
+See TEST_M2.47.txt for the complete focused test flow.
 
 Quick check:
-1. Look away while standing by either arcade exit: no prompt should appear.
-2. Aim at the Street Fighter mural door, press E, and confirm the west-side destination.
-3. Start the Pac-Man cocktail table and verify its normal-oriented 28 x 31 maze.
-4. Confirm both cabinet screens sit flush and face into the arcade.
+1. Start Pac-Man and verify every pellet path has small bright dots.
+2. Aim at either door normally—do not look down—to reveal its exit prompt.
+3. Confirm the rear Arcade exit lands beside the actual west-side door.
+4. Confirm the exterior Enter Arcade choice uses the matching arcade-card style.

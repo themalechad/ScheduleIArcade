@@ -1,0 +1,10 @@
+SCHEDULE I ARCADE M2.47 - PELLETS, EYE-LEVEL EXITS, AND ENTRY PROMPT
+
+1. Start the Pac-Man cocktail table and confirm every dotted path has visible, evenly spaced
+   cream-coloured 2-pixel pellets. Collect several to verify scoring still increases.
+2. Stand within 1.5 m of each arcade door at normal height. The exit prompt must appear only while
+   the door is directly in view; do not tilt the camera down to reveal it.
+3. Use the Street Fighter mural door. Confirm the west-side exit is shifted 1.25 m backward from
+   the prior point and places the player beside the rear Arcade door rather than ahead of it.
+4. Knock at the exterior Arcade door. Confirm the fallback `ARCADE ENTRANCE` choice uses the same
+   dark, high-contrast card and cyan accent as the interior prompts, with Enter Arcade and Cancel.
