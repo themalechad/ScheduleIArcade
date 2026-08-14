@@ -1446,13 +1446,19 @@ internal sealed class RawArcadeSceneService : IDisposable
             var renderer = screen.GetComponent<Renderer>();
             if (renderer != null)
             {
+                DoomCabinetEdition edition = index == 1 ? DoomCabinetEdition.Doom1 : DoomCabinetEdition.Doom2;
+                bool doomReady = DoomCabinetModBridge.IsReady(edition, out _);
                 renderer.sharedMaterial = CreateAttractScreenMaterial(
                     "ScheduleIArcade_M_CabinetScreen" + suffix,
                     "__arcade_cabinet_standby_" + suffix,
-                    index == 1 ? "DOOM I" : "DOOM II",
-                    "PRESS E",
-                    index == 1 ? new Color32(255, 79, 28, 255) : new Color32(80, 240, 108, 255),
-                    index == 1 ? new Color32(255, 200, 86, 255) : new Color32(130, 255, 170, 255));
+                    doomReady ? (index == 1 ? "DOOM I" : "DOOM II") : "TEST MODE",
+                    doomReady ? "PRESS E" : "DOOM MOD NOT READY",
+                    doomReady
+                        ? (index == 1 ? new Color32(255, 79, 28, 255) : new Color32(80, 240, 108, 255))
+                        : new Color32(60, 190, 255, 255),
+                    doomReady
+                        ? (index == 1 ? new Color32(255, 200, 86, 255) : new Color32(130, 255, 170, 255))
+                        : new Color32(155, 230, 255, 255));
             }
 
             // Keep the collider: aiming at either monitor resolves to that cabinet parent.

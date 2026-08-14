@@ -1,8 +1,8 @@
-SCHEDULE I ARCADE M2.49 - BLUE SERVICE DOOR EXIT
+SCHEDULE I ARCADE M2.50 - EXTERNAL DOOM CABINETS
 
-See TEST_M2.49.txt for the complete focused test flow.
+See TEST_M2.50.txt for the complete focused test flow.
 
 Quick check:
-1. Use the rear mural door.
-2. Confirm it lands at the blue service door, rather than the red door.
-3. Confirm the player is facing west at the destination.
+1. Restart Schedule I so both separately installed Doom TV mods load.
+2. Use each matching stand-up cabinet and confirm it shows the appropriate Doom game.
+3. Temporarily make a required Doom WAD unavailable, restart, and confirm that cabinet shows TEST MODE instead.

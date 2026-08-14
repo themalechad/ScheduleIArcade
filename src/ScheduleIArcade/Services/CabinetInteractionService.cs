@@ -53,9 +53,12 @@ internal sealed class CabinetInteractionService
                 GetDisplayName(_session.ActiveCabinet),
                 _session.ActiveCabinet?.Id.Equals("TV", StringComparison.OrdinalIgnoreCase) == true
                     ? "ARROWS PLAY  •  TAB MENU  •  ESC EXIT"
-                    : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
-                        ? "ARROWS MOVE  •  TAB PAUSE  •  ESC EXIT"
-                        : "ARROWS PLAY  •  ESC EXIT",
+                    : _session.ActiveCabinet?.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase) == true ||
+                      _session.ActiveCabinet?.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase) == true
+                        ? "WASD / ARROWS PLAY  •  ESC EXIT"
+                        : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
+                            ? "ARROWS MOVE  •  TAB PAUSE  •  ESC EXIT"
+                            : "ARROWS PLAY  •  ESC EXIT",
                 "Arcade session active — player controls and hotbar are locked.",
                 52f,
                 new Color(0.10f, 0.88f, 1.00f, 1f));
@@ -69,9 +72,13 @@ internal sealed class CabinetInteractionService
             ? "MACHINE IN USE"
             : _lookedAt.Id.Equals("TV", StringComparison.OrdinalIgnoreCase)
                 ? "PRESS [E]  PLAY PONG + SNAKE"
-                : _lookedAt.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
-                    ? "PRESS [E]  PLAY PAC-MAN"
-                    : "PRESS [E]  START ARCADE DEMO";
+                : _lookedAt.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase)
+                    ? "PRESS [E]  PLAY DOOM I"
+                    : _lookedAt.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase)
+                        ? "PRESS [E]  PLAY DOOM II"
+                        : _lookedAt.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
+                            ? "PRESS [E]  PLAY PAC-MAN"
+                            : "PRESS [E]  START ARCADE DEMO";
         string detail = _lookedAt.IsOccupied
             ? "Wait for the current player to finish."
             : "Look directly at this machine to interact.  [F] picks it up to move it.";
@@ -93,6 +100,10 @@ internal sealed class CabinetInteractionService
             return "ARCADE TV";
         if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
             return "PAC-MAN COCKTAIL TABLE";
+        if (cabinet.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase))
+            return "DOOM I CABINET";
+        if (cabinet.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase))
+            return "DOOM II CABINET";
         return cabinet.Id switch
         {
             "01" => "STAND-UP ARCADE 1",

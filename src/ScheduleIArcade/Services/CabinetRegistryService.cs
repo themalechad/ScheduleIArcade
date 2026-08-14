@@ -32,7 +32,11 @@ internal sealed class CabinetRegistryService
                 ? "arcade_tv"
                 : suffix.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
                     ? "pacman"
-                    : Constants.DefaultGameId;
+                    : suffix.Equals("01", StringComparison.OrdinalIgnoreCase)
+                        ? "doom1"
+                        : suffix.Equals("02", StringComparison.OrdinalIgnoreCase)
+                            ? "doom2"
+                            : Constants.DefaultGameId;
             _cabinets.Add(new ArcadeCabinet(suffix, transform.gameObject, screen, gameId));
             MelonLogger.Msg($"Registered arcade cabinet {suffix} -> {gameId}.");
         }

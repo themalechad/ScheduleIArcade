@@ -1,0 +1,21 @@
+SCHEDULE I ARCADE M2.50 - EXTERNAL DOOM CABINETS
+
+Preconditions
+1. Keep the supplied mods installed in the Schedule I Mods directory:
+   - ScheduleIDoomTV.dll with SchedualDoomTv/WAD/Doom1.WAD and SchedualDoomTv/Runtime/doomgeneric_s1.dll
+   - ScheduleIDoom2TV.dll with SchedualDoom2Tv/WAD/Doom2.wad and SchedualDoom2Tv/Runtime/doomgeneric_s1.dll
+2. Fully close and relaunch Schedule I after adding, removing, or renaming either mod.
+
+Ready-path checks
+1. Enter the custom arcade. Stand-up arcade 1 should show DOOM I and PRESS E.
+2. Aim directly at stand-up arcade 1. Its prompt should say PLAY DOOM I. Press E.
+3. Confirm the cabinet uses the working Doom I frame from ScheduleIDoomTV, including the Doom I WAD screen.
+4. Confirm WASD or arrow keys control the game, and Escape exits the arcade session.
+5. Repeat with stand-up arcade 2. It should label itself DOOM II, use ScheduleIDoom2TV, and show the Doom II WAD.
+
+Fallback checks
+1. With Schedule I closed, temporarily rename or move one required DLL, WAD, or doomgeneric_s1.dll.
+2. Relaunch the game and enter the arcade.
+3. Confirm only the matching cabinet changes to TEST MODE / DOOM MOD NOT READY.
+4. Press E on that cabinet. It must run the built-in animated test pattern safely, with no error spam.
+5. Restore the dependency and restart Schedule I. The cabinet must return to its matching Doom game.

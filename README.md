@@ -1,4 +1,15 @@
-# Schedule I Arcade M2.49
+# Schedule I Arcade M2.50
+
+M2.50 connects the two stand-up cabinets to their matching separately installed Doom TV mods
+without packaging, loading, or redistributing either mod or its WAD. Cabinet 1 runs the live
+framebuffer from ScheduleIDoomTV.dll / SchedualDoomTv/WAD/Doom1.WAD; cabinet 2 runs the live
+framebuffer from ScheduleIDoom2TV.dll / SchedualDoom2Tv/WAD/Doom2.wad. Both cabinets validate
+their expected DLL, loaded MelonLoader assembly, WAD header, and native runtime before use. A missing
+or invalid dependency is plainly marked TEST MODE and remains playable with the safe test screen.
+
+See TEST_M2.50.txt for the focused regression pass.
+
+## M2.49
 
 M2.49 moves the rear arcade exit a further 5m backward along its west-facing route. It now targets
 the blue service door at `(-53.65, -3.0, 146.1)` instead of the nearer red door, while preserving
