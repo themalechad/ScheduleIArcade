@@ -1,4 +1,14 @@
-# Schedule I Arcade M2.47
+# Schedule I Arcade M2.48
+
+M2.48 places both stand-up CRTs on the actual recessed monitor plane instead of the cabinets'
+outer collision shell, with a 2 mm visual offset to prevent flickering. Both entire cabinet meshes
+now receive original generated retro hell-sci-fi UV atlases: stand-up 1 has an orange/bone `DOOM I`
+skin, while stand-up 2 has a steel/green `DOOM II` skin. Their idle CRTs use matching titles and
+colours. No ripped Doom artwork is included or redistributed.
+
+See `TEST_M2.48.txt` for the focused regression pass.
+
+## M2.47
 
 M2.47 guarantees that Pac-Man's small route pellets stay visible on the in-world screen, even when
 the supplied source sprite's dark edge pixels are downscaled. Exit hotspots are now at natural eye

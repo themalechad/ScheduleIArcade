@@ -1427,37 +1427,51 @@ internal sealed class RawArcadeSceneService : IDisposable
             if (cabinet == null)
                 continue;
 
+            Renderer? cabinetRenderer = cabinet.GetComponent<Renderer>();
+            if (cabinetRenderer != null)
+                cabinetRenderer.sharedMaterial = CreateDoomCabinetMaterial(index);
+
             var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
             screen.name = Constants.ScreenPrefix + suffix;
             screen.transform.SetParent(cabinet, false);
-            // The imported split cabinets have opposite authored fronts. Use the actual plane
-            // for each and a 6 mm offset only, so screens sit in the cabinet instead of floating.
+            // The imported split cabinets have opposite authored fronts. Their monitor faces are
+            // inset around X=+/-0.075 (not at the +/-0.26 collision-shell edge). Place the
+            // screen only 2 mm proud of that real plane so it reads as a fitted CRT, not a sign.
             bool isCabinetTwo = index == 2;
-            float frontX = isCabinetTwo ? 0.266f : -0.266f;
-            screen.transform.localPosition = new Vector3(frontX, 0.22f, 0.00f);
+            float frontX = isCabinetTwo ? 0.077f : -0.077f;
+            screen.transform.localPosition = new Vector3(frontX, 0.277f, 0.00f);
             screen.transform.localRotation = Quaternion.Euler(0f, isCabinetTwo ? 90f : -90f, 0f);
-            screen.transform.localScale = new Vector3(0.38f, 0.28f, 1f);
+            screen.transform.localScale = new Vector3(0.34f, 0.235f, 1f);
 
             var renderer = screen.GetComponent<Renderer>();
             if (renderer != null)
             {
-                Color32 primary = index == 1
-                    ? new Color32(255, 65, 155, 255)
-                    : new Color32(45, 228, 255, 255);
-                Color32 secondary = index == 1
-                    ? new Color32(255, 202, 55, 255)
-                    : new Color32(118, 255, 120, 255);
                 renderer.sharedMaterial = CreateAttractScreenMaterial(
                     "ScheduleIArcade_M_CabinetScreen" + suffix,
                     "__arcade_cabinet_standby_" + suffix,
-                    "ARCADE " + index,
+                    index == 1 ? "DOOM I" : "DOOM II",
                     "PRESS E",
-                    primary,
-                    secondary);
+                    index == 1 ? new Color32(255, 79, 28, 255) : new Color32(80, 240, 108, 255),
+                    index == 1 ? new Color32(255, 200, 86, 255) : new Color32(130, 255, 170, 255));
             }
 
             // Keep the collider: aiming at either monitor resolves to that cabinet parent.
         }
+    }
+
+    private Material CreateDoomCabinetMaterial(int index)
+    {
+        bool sequel = index == 2;
+        string textureKey = "__arcade_doom_cabinet_" + index;
+        Material material = CreateUnlitTextureMaterial(string.Empty, "ScheduleIArcade_M_DoomCabinet" + index);
+        Texture2D texture = DoomCabinetTextureFactory.Create(
+            "ScheduleIArcade_DoomCabinet" + index,
+            sequel);
+        _textures[textureKey] = texture;
+        if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
+        if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+        if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
+        return material;
     }
 
     private void CreatePacmanTableScreen(Transform root)
