@@ -195,7 +195,15 @@ internal sealed class ArcadeTvViewService
             // is the reliable source of truth: place the player on its rendered/front side,
             // never at a hard-coded root back direction. This keeps the Doom view at the CRT
             // instead of its cabinet side or outside the room.
-            Vector3 viewingDirection = cabinet.ScreenRenderer.transform.forward.normalized;
+            // The free-standing TV's physical front is local -Z, while the vertical Quad uses
+            // +Z as its nominal normal so its U axis stays readable. Its player-facing side is
+            // therefore the opposite of the Quad normal; the fitted arcade and pinball screens
+            // use their Quad normal directly.
+            bool arcadeTv = cabinet.Id.Equals("TV", StringComparison.OrdinalIgnoreCase);
+            Vector3 viewingDirection = (arcadeTv
+                    ? -cabinet.ScreenRenderer.transform.forward
+                    : cabinet.ScreenRenderer.transform.forward)
+                .normalized;
             if (viewingDirection.sqrMagnitude < 0.01f)
                 viewingDirection = cabinet.Root.transform.forward;
             cameraPosition = screenCenter + viewingDirection * 1.10f + Vector3.up * 0.04f;

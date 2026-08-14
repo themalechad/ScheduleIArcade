@@ -13,6 +13,12 @@ TARGET_YAWS = {
     'Arcade Machine 02': 90.0,
 }
 
+TARGET_LOCATIONS = {
+    # Keep pinballs 1/2 on the west wall, and move 3/4 beside the Doom cabinets.
+    'Pinball Machine 03': (-0.65, 3.58, 0.745),
+    'Pinball Machine 04': (0.45, 3.58, 0.745),
+}
+
 
 def move_street_fighter_door_to_right(obj):
     bm = bmesh.new()
@@ -59,7 +65,9 @@ for name, yaw in TARGET_YAWS.items():
     obj.rotation_euler = (0.0, 0.0, math.radians(yaw))
     # Once the model's real front/back axis is used, its old origin position intersects the
     # west wall. Move just the pinball row 12 cm into the room, yielding a small flush gap.
-    if name.startswith('Pinball Machine'):
+    if name in TARGET_LOCATIONS:
+        obj.location = TARGET_LOCATIONS[name]
+    elif name.startswith('Pinball Machine'):
         obj.location.x = -2.67
 
 environment = bpy.data.objects.get('Enviorment')

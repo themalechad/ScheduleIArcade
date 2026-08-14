@@ -1430,16 +1430,17 @@ internal sealed class RawArcadeSceneService : IDisposable
 
             Renderer? cabinetRenderer = cabinet.GetComponent<Renderer>();
             if (cabinetRenderer != null)
-                cabinetRenderer.sharedMaterial = CreateDoomCabinetMaterial(index);
+                cabinetRenderer.sharedMaterial = CreateDoomCabinetFrameMaterial(index);
 
             var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
             screen.name = Constants.ScreenPrefix + suffix;
             screen.transform.SetParent(cabinet, false);
             // The imported split cabinets have opposite authored fronts. Their monitor faces are
             // inset around X=+/-0.075 (not at the +/-0.26 collision-shell edge). Place the
-            // screen only 2 mm proud of that real plane so it reads as a fitted CRT, not a sign.
+            // screen 8 mm proud of that plane, in front of the old painted monitor polygons,
+            // so the live CRT can never be covered by those source-mesh textures.
             bool isCabinetTwo = index == 2;
-            float frontX = isCabinetTwo ? 0.077f : -0.077f;
+            float frontX = isCabinetTwo ? 0.083f : -0.083f;
             screen.transform.localPosition = new Vector3(frontX, 0.277f, 0.00f);
             screen.transform.localRotation = Quaternion.Euler(0f, isCabinetTwo ? 90f : -90f, 0f);
             // Both authored cabinet fronts face local -X after their room rotations. A Unity
@@ -1457,10 +1458,10 @@ internal sealed class RawArcadeSceneService : IDisposable
                     doomReady ? (index == 1 ? "DOOM I" : "DOOM II") : "TEST MODE",
                     doomReady ? "PRESS E" : "DOOM MOD NOT READY",
                     doomReady
-                        ? (index == 1 ? new Color32(255, 79, 28, 255) : new Color32(80, 240, 108, 255))
+                        ? (index == 1 ? new Color32(255, 79, 28, 255) : new Color32(255, 58, 58, 255))
                         : new Color32(60, 190, 255, 255),
                     doomReady
-                        ? (index == 1 ? new Color32(255, 200, 86, 255) : new Color32(130, 255, 170, 255))
+                        ? (index == 1 ? new Color32(255, 200, 86, 255) : new Color32(255, 185, 185, 255))
                         : new Color32(155, 230, 255, 255));
             }
 
@@ -1468,19 +1469,14 @@ internal sealed class RawArcadeSceneService : IDisposable
         }
     }
 
-    private Material CreateDoomCabinetMaterial(int index)
+    private Material CreateDoomCabinetFrameMaterial(int index)
     {
-        bool sequel = index == 2;
-        string textureKey = "__arcade_doom_cabinet_" + index;
-        Material material = CreateUnlitTextureMaterial(string.Empty, "ScheduleIArcade_M_DoomCabinet" + index);
-        Texture2D texture = DoomCabinetTextureFactory.Create(
-            "ScheduleIArcade_DoomCabinet" + index,
-            sequel);
-        _textures[textureKey] = texture;
-        if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
-        if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
-        if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
-        return material;
+        // Do not retexture the full source mesh: its UV islands include painted monitor
+        // geometry that can draw over the runtime CRT. Keep only a plain green cabinet shell.
+        Color frameGreen = index == 2
+            ? new Color32(20, 76, 42, 255)
+            : new Color32(24, 92, 49, 255);
+        return CreateDoorMaterial(frameGreen, "ScheduleIArcade_M_DoomCabinetFrame" + index);
     }
 
     private void CreatePacmanTableScreen(Transform root)

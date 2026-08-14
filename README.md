@@ -1,4 +1,17 @@
-# Schedule I Arcade M2.52
+# Schedule I Arcade M2.53
+
+M2.53 removes the generated full-cabinet Doom texture atlases completely. The cabinets are now
+plain green physical shells, their live CRTs sit ahead of the old painted monitor geometry, and
+the Doom II idle label is red. This eliminates the UV-texture panels that were covering the
+playable displays and removes their flipped lettering.
+
+Pinball machines 3 and 4 now sit alongside the north-wall Doom cabinets. The Arcade TV play view
+also uses the TV's actual front face, fixing the camera path that was previously sending players
+through its back wall.
+
+See TEST_M2.53.txt for the focused regression pass.
+
+## M2.52
 
 M2.52 makes all four physical pinball machines playable with a self-contained Space Cadet-style
 pinball port. Every machine now has a fitted player-facing display with an idle attract screen;

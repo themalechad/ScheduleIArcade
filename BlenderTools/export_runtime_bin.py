@@ -141,14 +141,22 @@ def validate_layout(exports):
             if overlap_x>0.02 and overlap_z>0.02:
                 errors.append(f"{a['name']} overlaps {b['name']} by about {overlap_x:.2f}m x {overlap_z:.2f}m")
 
-    # The two wall rows should be close enough to read as aligned, but never penetrate the wall.
+    # The two west-wall pinballs and the second row beside the Doom machines must each stay
+    # flush to their intended wall, without clipping it.
     for name,pin in bounds.items():
         if not name.startswith('Pinball Machine'):
             continue
-        west_inside=fx(-2.67)+fx(0.18)*0.5
-        gap=pin[0]-west_inside
+        number=int(name.rsplit(' ',1)[1])
+        if number <= 2:
+            wall_inside=fx(-2.67)+fx(0.18)*0.5
+            gap=pin[0]-wall_inside
+            label='west'
+        else:
+            wall_inside=fz(-3.02)+fz(0.18)*0.5
+            gap=pin[2]-wall_inside
+            label='Doom-row'
         if gap < -0.025 or gap > 0.18:
-            errors.append(f"{name} is not flush with the west wall (gap={gap:.3f}m)")
+            errors.append(f"{name} is not flush with the {label} wall row (gap={gap:.3f}m)")
     for name,cabinet in bounds.items():
         if not name.startswith('Arcade Machine'):
             continue

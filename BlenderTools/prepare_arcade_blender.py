@@ -40,8 +40,9 @@ TARGETS = {
     # while upright screens (local -X) point north into the room at +90°.
     'Pinball Machine 01': ((-2.67,  1.55, 0.745), -180.0),
     'Pinball Machine 02': ((-2.67,  0.52, 0.745), -180.0),
-    'Pinball Machine 03': ((-2.67, -0.52, 0.745), -180.0),
-    'Pinball Machine 04': ((-2.67, -1.55, 0.745), -180.0),
+    # Machines 3 and 4 form a second row beside the two Doom cabinets.
+    'Pinball Machine 03': ((-0.65,  3.58, 0.745), -180.0),
+    'Pinball Machine 04': (( 0.45,  3.58, 0.745), -180.0),
     'Arcade Machine 01': ((-2.34, 3.58, 0.779), -90.0),
     'Arcade Machine 02': ((-1.66, 3.58, 0.779), 90.0),
     'Table Top': ((0.00, 0.00, 0.317), -90.0),
