@@ -1546,7 +1546,20 @@ internal sealed class RawArcadeSceneService : IDisposable
             Vector3 glassCenter = new Vector3(-0.10f, 0.012f, bounds.center.z);
             screen.transform.localPosition = glassCenter + glassNormal * 0.007f;
             screen.transform.localRotation = Quaternion.LookRotation(glassNormal, Vector3.right);
-            screen.transform.localScale = new Vector3(0.40f, 0.60f, 1f);
+            // The physical playfield glass is wider/longer on the Doom-row pair. Use the mesh
+            // bounds so every display fills its glass without hanging past its metal rails.
+            float glassWidth = index <= 2
+                ? Mathf.Min(bounds.size.z * 0.75f, 0.44f)
+                : Mathf.Min(bounds.size.z * 0.89f, 0.54f);
+            float glassLength = index <= 2
+                ? Mathf.Min(bounds.size.x * 0.72f, 0.67f)
+                : Mathf.Min(bounds.size.x * 0.79f, 0.74f);
+
+            // The Doom-row pair is the source mesh's mirrored counterpart. Keep the first pair's
+            // U flip, but use the opposite display U axis for machines 3/4 so SPACE CADET reads
+            // normally from the player side on every glass surface.
+            float screenU = index <= 2 ? -glassWidth : glassWidth;
+            screen.transform.localScale = new Vector3(screenU, glassLength, 1f);
 
             Renderer? renderer = screen.GetComponent<Renderer>();
             if (renderer != null)
@@ -1559,7 +1572,7 @@ internal sealed class RawArcadeSceneService : IDisposable
                     new Color32(255, 218, 96, 255));
         }
 
-        MelonLogger.Msg("Four Space Cadet pinball displays were fitted to the machines' player-facing backboxes.");
+        MelonLogger.Msg("Four Space Cadet pinball displays were fitted and unmirrored on their sloped playfield glass.");
     }
 
     private Material CreateUnlitTextureMaterial(string textureName, string materialName)

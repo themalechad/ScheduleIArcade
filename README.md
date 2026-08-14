@@ -1,4 +1,24 @@
-# Schedule I Arcade M2.54
+# Schedule I Arcade M2.56
+
+M2.56 replaces the incompatible AC/DC source texture on all four physical pinballs with a unified
+Space Cadet sci-fi pinball skin. It deliberately has no baked lettering, so the source mesh's
+inconsistent mirrored UV islands cannot produce backward words. Pinballs 3 and 4 use their opposite
+glass display U axis, correcting their live Space Cadet screen independently of pinballs 1 and 2.
+
+See TEST_M2.56.txt for the focused regression pass.
+
+## M2.55
+
+M2.55 corrects the imported pinball texture U axis, so its playfield, cabinet, and AC/DC artwork
+read normally from the player side. All four fitted Space Cadet displays use the same corrected
+orientation. Pinballs 3 and 4 turn 180 degrees toward the arcade from the Doom-machine row; their
+glass displays expand to the available playfield, while pinballs 1 and 2 receive a smaller glass-fit
+increase. Pac-Man ghosts now interpolate continuously from tile to tile without changing their
+collision or maze pathing.
+
+See TEST_M2.55.txt for the focused regression pass.
+
+## M2.54
 
 M2.54 seats the Doom displays on the cabinets' measured, upward-tilted CRT planes, 9 mm above
 the fake source monitor so the entire playable display is visible but still reads as flush glass.

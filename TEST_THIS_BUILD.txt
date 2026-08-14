@@ -1,8 +1,8 @@
-SCHEDULE I ARCADE M2.54 - TILTED CRTS + PINBALL GLASS
+SCHEDULE I ARCADE M2.56 - SPACE CADET PINBALL SKIN
 
-See TEST_M2.54.txt for the complete focused test flow.
+See TEST_M2.56.txt for the complete focused test flow.
 
 Quick check:
-1. Confirm both Doom CRTs are fully visible within their tilted physical bezels.
-2. Confirm every pinball display is on its sloped playfield glass.
-3. Confirm the pinball ball is smooth and controllable rather than too fast.
+1. Confirm all four physical pinballs use the blue Space Cadet skin, with no AC/DC artwork.
+2. Confirm pinballs 3 and 4 have readable, non-mirrored live Space Cadet screens.
+3. Confirm every display fills its sloped glass and Pac-Man ghosts glide smoothly between cells.

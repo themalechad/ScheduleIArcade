@@ -19,10 +19,12 @@ ORDER=[
 ]
 TEXTURES={
  'Enviorment':('Enviorment_Texture.jpg','Enviorment_Texture_NRM.jpg',''),
- 'Pinball Machine 01':('Pinball_base_texture.jpg','Pinball_base_texture_NRM.jpg','Pinball_base_texture_emissive_map.jpg'),
- 'Pinball Machine 02':('Pinball_base_texture.jpg','Pinball_base_texture_NRM.jpg','Pinball_base_texture_emissive_map.jpg'),
- 'Pinball Machine 03':('Pinball_base_texture.jpg','Pinball_base_texture_NRM.jpg','Pinball_base_texture_emissive_map.jpg'),
- 'Pinball Machine 04':('Pinball_base_texture.jpg','Pinball_base_texture_NRM.jpg','Pinball_base_texture_emissive_map.jpg'),
+ # The source AC/DC map has incompatible mirrored UV islands. Use one label-free Space Cadet
+ # pinball skin for every cabinet so it remains visually correct across each mirrored pair.
+ 'Pinball Machine 01':('Pinball_SpaceCadetTexture.png','',''),
+ 'Pinball Machine 02':('Pinball_SpaceCadetTexture.png','',''),
+ 'Pinball Machine 03':('Pinball_SpaceCadetTexture.png','',''),
+ 'Pinball Machine 04':('Pinball_SpaceCadetTexture.png','',''),
  'Arcade Machine 01':('Arcade_base_texture.jpg','Arcade_base_texture_NRM.jpg','Arcade_base_texture_emission_map.jpg'),
  'Arcade Machine 02':('Arcade_base_texture.jpg','Arcade_base_texture_NRM.jpg','Arcade_base_texture_emission_map.jpg'),
  'Table Top':('tabletop_base_texture.jpg','tabletop_base_texture_NRM.jpg','tabletop_base_texture_emissive_map.jpg'),

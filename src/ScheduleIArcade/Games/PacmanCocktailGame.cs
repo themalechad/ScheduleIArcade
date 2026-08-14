@@ -37,11 +37,13 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         {
             Spawn = spawn;
             Position = spawn;
+            PreviousPosition = spawn;
             Color = color;
         }
 
         public Vector2Int Spawn { get; }
         public Vector2Int Position { get; set; }
+        public Vector2Int PreviousPosition { get; set; }
         public Vector2Int Direction { get; set; }
         public Color32 Color { get; }
     }
@@ -243,6 +245,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         for (int i = 0; i < _ghosts.Count; i++)
         {
             _ghosts[i].Position = _ghosts[i].Spawn;
+            _ghosts[i].PreviousPosition = _ghosts[i].Spawn;
             _ghosts[i].Direction = i % 2 == 0 ? Vector2Int.left : Vector2Int.right;
         }
     }
@@ -340,7 +343,10 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         }
         ghost.Direction = directionChoice;
         if (TryGetOpenStep(ghost.Position, directionChoice, out Vector2Int nextPosition))
+        {
+            ghost.PreviousPosition = ghost.Position;
             ghost.Position = nextPosition;
+        }
     }
 
     private void CheckGhostCollision()
@@ -355,6 +361,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             {
                 _score += 200;
                 ghost.Position = ghost.Spawn;
+                ghost.PreviousPosition = ghost.Spawn;
                 ghost.Direction = Vector2Int.left;
                 continue;
             }
@@ -540,11 +547,25 @@ internal sealed class PacmanCocktailGame : IArcadeGame
 
     private void DrawGhosts()
     {
+        float ghostStep = Mathf.Max(0.082f, 0.145f - (_level - 1) * 0.003f);
+        float stepProgress = Mathf.Clamp01(_ghostTimer / ghostStep);
+        // Smooth the visual motion continuously between grid cells, while gameplay collision and
+        // pathing remain grid-exact. This keeps the supplied pixel ghosts crisp but removes the
+        // stop/start stepping that was visible at the old movement cadence.
+        float easedProgress = stepProgress * stepProgress * (3f - 2f * stepProgress);
         for (int i = 0; i < _ghosts.Count; i++)
         {
             Ghost ghost = _ghosts[i];
-            int x = OriginX + ghost.Position.x * Cell + 1;
-            int y = OriginY + ghost.Position.y * Cell + 1;
+            Vector2Int from = ghost.PreviousPosition;
+            Vector2Int to = ghost.Position;
+            // A tunnel wrap should never animate a ghost straight across the full maze.
+            float renderProgress = Mathf.Abs(to.x - from.x) > 1 || Mathf.Abs(to.y - from.y) > 1
+                ? 1f
+                : easedProgress;
+            float cellX = Mathf.Lerp(from.x, to.x, renderProgress);
+            float cellY = Mathf.Lerp(from.y, to.y, renderProgress);
+            int x = OriginX + Mathf.RoundToInt(cellX * Cell) + 1;
+            int y = OriginY + Mathf.RoundToInt(cellY * Cell) + 1;
             Color32 color = _frightenedTimer > 0f ? Frightened : ghost.Color;
             Texture2D? sprite = _sourceGhostSprites[i % _sourceGhostSprites.Length];
             if (sprite != null && _frightenedTimer <= 0f)

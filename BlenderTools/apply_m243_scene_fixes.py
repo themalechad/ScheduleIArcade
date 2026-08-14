@@ -7,8 +7,10 @@ import math
 TARGET_YAWS = {
     'Pinball Machine 01': -180.0,
     'Pinball Machine 02': -180.0,
-    'Pinball Machine 03': -90.0,
-    'Pinball Machine 04': -90.0,
+    # The Doom-row pair must face back into the arcade; the prior -90 degree orientation showed
+    # their blank rear panels to the player.
+    'Pinball Machine 03': 90.0,
+    'Pinball Machine 04': 90.0,
     'Arcade Machine 01': -90.0,
     'Arcade Machine 02': 90.0,
 }
