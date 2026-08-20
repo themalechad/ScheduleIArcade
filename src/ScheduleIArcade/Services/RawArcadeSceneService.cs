@@ -284,6 +284,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         _meshes.Add(mesh);
 
         bool isArcadeCabinet = modelName.StartsWith("Arcade Machine", StringComparison.OrdinalIgnoreCase);
+        bool isPinballMachine = modelName.StartsWith("Pinball Machine", StringComparison.OrdinalIgnoreCase);
         bool isPacmanCocktail = modelName.Equals("Table Top", StringComparison.OrdinalIgnoreCase);
         string runtimeName = modelName;
         if (isArcadeCabinet)
@@ -351,14 +352,52 @@ internal sealed class RawArcadeSceneService : IDisposable
         }
         else if (!isEnvironment)
         {
-            var collider = go.AddComponent<BoxCollider>();
             Bounds bounds = mesh.bounds;
-            const float horizontalInset = 0.10f;
-            Vector3 size = bounds.size;
-            size.x = Mathf.Max(0.18f, size.x - horizontalInset * 2f);
-            size.z = Mathf.Max(0.18f, size.z - horizontalInset * 2f);
-            collider.center = bounds.center;
-            collider.size = size;
+            if (isPinballMachine)
+            {
+                CreatePinballSmoothColliders(go.transform, bounds);
+            }
+            else
+            {
+                var collider = go.AddComponent<BoxCollider>();
+                const float horizontalInset = 0.10f;
+                Vector3 size = bounds.size;
+                size.x = Mathf.Max(0.18f, size.x - horizontalInset * 2f);
+                size.z = Mathf.Max(0.18f, size.z - horizontalInset * 2f);
+                collider.center = bounds.center;
+                collider.size = size;
+            }
+        }
+    }
+
+    private static void CreatePinballSmoothColliders(Transform parent, Bounds bounds)
+    {
+        // The old full-mesh box enclosed the legs, backbox and empty space as one sharp block.
+        // In the close rows that could pinch a CharacterController until the player jumped.
+        // Two overlapping vertical capsules follow the lower body with rounded edges.
+        Vector3 size = bounds.size;
+        float shortSpan = Mathf.Min(size.x, size.z);
+        float longSpan = Mathf.Max(size.x, size.z);
+        float radius = Mathf.Clamp(shortSpan * 0.31f, 0.14f, 0.22f);
+        float height = Mathf.Clamp(size.y * 0.62f, 0.72f, 1.02f);
+        height = Mathf.Max(height, radius * 2f);
+        float offset = Mathf.Max(0f, longSpan * 0.5f - radius - 0.07f);
+        Vector3 longAxis = size.x >= size.z ? Vector3.right : Vector3.forward;
+        int count = offset > 0.08f ? 2 : 1;
+
+        for (int i = 0; i < count; i++)
+        {
+            float signedOffset = count == 1 ? 0f : (i == 0 ? -offset : offset);
+            var proxy = new GameObject("ARCADE_PINBALL_SMOOTH_COLLIDER_" + (i + 1));
+            proxy.transform.SetParent(parent, false);
+            proxy.transform.localPosition = new Vector3(bounds.center.x, bounds.min.y + height * 0.5f, bounds.center.z)
+                + longAxis * signedOffset;
+
+            var capsule = proxy.AddComponent<CapsuleCollider>();
+            capsule.direction = 1;
+            capsule.center = Vector3.zero;
+            capsule.radius = radius;
+            capsule.height = height;
         }
     }
 
@@ -1228,7 +1267,9 @@ internal sealed class RawArcadeSceneService : IDisposable
         doorRoot.transform.localPosition = center;
         doorRoot.transform.localRotation = Quaternion.Euler(0f, Mathf.Atan2(tangent.x, tangent.z) * Mathf.Rad2Deg, 0f);
 
-        const float centerGap = 0.035f;
+        // Slight panel overlap plus a face-mounted astragal eliminates the bright slit that was
+        // visible between the generated leaves from inside the fake arcade.
+        const float centerGap = -0.014f;
         float panelWidth = (totalWidth - centerGap) * 0.5f;
         float panelY = height * 0.5f;
         float southZ = -(panelWidth + centerGap) * 0.5f;
@@ -1237,6 +1278,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         // For a chamfer wall local Z runs along the wall and local +X points into the arcade.
         CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A", doorRoot.transform, new Vector3(0f, panelY, southZ), new Vector3(0.09f, height, panelWidth), doorMaterial, true);
         CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B", doorRoot.transform, new Vector3(0f, panelY, northZ), new Vector3(0.09f, height, panelWidth), doorMaterial, true);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_CenterSeal", doorRoot.transform, new Vector3(0.058f, panelY, 0f), new Vector3(0.024f, height - 0.03f, 0.038f), frameMaterial, false);
         CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A_Window", doorRoot.transform, new Vector3(0.052f, 1.47f, southZ), new Vector3(0.018f, 0.72f, panelWidth * 0.62f), glassMaterial, false);
         CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B_Window", doorRoot.transform, new Vector3(0.052f, 1.47f, northZ), new Vector3(0.018f, 0.72f, panelWidth * 0.62f), glassMaterial, false);
 
@@ -1539,13 +1581,22 @@ internal sealed class RawArcadeSceneService : IDisposable
             screen.name = Constants.ScreenPrefix + suffix;
             screen.transform.SetParent(machine, false);
 
-            // Match the real sloped playfield glass: it rises toward the backbox (+X), while
-            // its front/up normal points toward the player. The portrait screen now lives on
-            // the physical glass instead of standing vertically over the machine.
-            Vector3 glassNormal = new Vector3(-0.148f, 0.989f, 0f);
-            Vector3 glassCenter = new Vector3(-0.10f, 0.012f, bounds.center.z);
+            // The imported machine pair 3/4 is mirrored across its local X axis. Its sloped
+            // playfield glass therefore has the opposite normal and centre from machines 1/2.
+            // Fit to each measured plane instead of hovering one shared screen above the art.
+            bool mirroredGlass = index >= 3;
+            Vector3 glassNormal = mirroredGlass
+                ? new Vector3(0.148f, 0.989f, 0f)
+                : new Vector3(-0.148f, 0.989f, 0f);
+            Vector3 glassCenter = new Vector3(mirroredGlass ? 0.10f : -0.10f, 0.012f, bounds.center.z);
             screen.transform.localPosition = glassCenter + glassNormal * 0.007f;
-            screen.transform.localRotation = Quaternion.LookRotation(glassNormal, Vector3.right);
+            Quaternion glassRotation = Quaternion.LookRotation(glassNormal, Vector3.right);
+            // Preserve the measured glass normal, then rotate only the 3/4 texture frame around
+            // that normal. Their source UV basis is upside down even though their glass plane is
+            // mirrored correctly, so this makes the playable view upright without lifting it.
+            if (mirroredGlass)
+                glassRotation *= Quaternion.AngleAxis(180f, Vector3.forward);
+            screen.transform.localRotation = glassRotation;
             // The physical playfield glass is wider/longer on the Doom-row pair. Use the mesh
             // bounds so every display fills its glass without hanging past its metal rails.
             float glassWidth = index <= 2
@@ -1555,11 +1606,8 @@ internal sealed class RawArcadeSceneService : IDisposable
                 ? Mathf.Min(bounds.size.x * 0.72f, 0.67f)
                 : Mathf.Min(bounds.size.x * 0.79f, 0.74f);
 
-            // The Doom-row pair is the source mesh's mirrored counterpart. Keep the first pair's
-            // U flip, but use the opposite display U axis for machines 3/4 so SPACE CADET reads
-            // normally from the player side on every glass surface.
-            float screenU = index <= 2 ? -glassWidth : glassWidth;
-            screen.transform.localScale = new Vector3(screenU, glassLength, 1f);
+            // The shared U axis keeps text and score layout identical across all four tables.
+            screen.transform.localScale = new Vector3(-glassWidth, glassLength, 1f);
 
             Renderer? renderer = screen.GetComponent<Renderer>();
             if (renderer != null)

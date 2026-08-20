@@ -71,6 +71,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     private readonly Texture2D?[] _sourceGhostSprites = new Texture2D?[4];
     private Color32[]? _pixels;
     private Vector2Int _player;
+    private Vector2Int _playerPrevious;
     private Vector2Int _playerDirection;
     private Vector2Int _requestedDirection;
     private int _score;
@@ -190,7 +191,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         _nextDraw -= deltaTime;
         if (_nextDraw <= 0f)
         {
-            _nextDraw = 1f / 30f;
+            _nextDraw = 1f / 60f;
             DrawFrame();
         }
     }
@@ -237,6 +238,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     private void ResetPositions()
     {
         _player = new Vector2Int(13, 7);
+        _playerPrevious = _player;
         _playerDirection = Vector2Int.left;
         _requestedDirection = _playerDirection;
         _playerTimer = 0f;
@@ -287,6 +289,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
 
     private void StepPlayer()
     {
+        _playerPrevious = _player;
         if (TryGetOpenStep(_player, _requestedDirection, out Vector2Int requestedStep))
             _playerDirection = _requestedDirection;
         if (TryGetOpenStep(_player, _playerDirection, out Vector2Int forwardStep))
@@ -519,8 +522,16 @@ internal sealed class PacmanCocktailGame : IArcadeGame
 
     private void DrawPacMan()
     {
-        int cx = OriginX + _player.x * Cell + Cell / 2;
-        int cy = OriginY + _player.y * Cell + Cell / 2;
+        float playerStep = Mathf.Max(0.070f, 0.115f - (_level - 1) * 0.004f);
+        float stepProgress = Mathf.Clamp01(_playerTimer / playerStep);
+        float easedProgress = stepProgress * stepProgress * (3f - 2f * stepProgress);
+        float renderProgress = Mathf.Abs(_player.x - _playerPrevious.x) > 1 || Mathf.Abs(_player.y - _playerPrevious.y) > 1
+            ? 1f
+            : easedProgress;
+        float cellX = Mathf.Lerp(_playerPrevious.x, _player.x, renderProgress);
+        float cellY = Mathf.Lerp(_playerPrevious.y, _player.y, renderProgress);
+        int cx = OriginX + Mathf.RoundToInt(cellX * Cell) + Cell / 2;
+        int cy = OriginY + Mathf.RoundToInt(cellY * Cell) + Cell / 2;
         Texture2D? sprite = _sourcePacmanSprites[(int)(Time.time * 10f) % _sourcePacmanSprites.Length];
         if (sprite != null)
         {

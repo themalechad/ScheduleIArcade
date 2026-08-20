@@ -1,0 +1,7 @@
+SCHEDULE I ARCADE M2.60 - SMOOTH PINBALL STOPPERS
+
+1. Restart Schedule I after installing this build and confirm all four pinball screens remain upright and aligned to their glass.
+2. Launch a ball, then hit each bumper, target bank, sling, and the small centre drain guard several times.
+3. Confirm each collision returns the ball with a smooth, controlled pace. It must not build into a fast jittery or uncontrollable state after repeated stopper hits.
+4. Confirm launch and active-flipper shots still have enough energy to reach the upper playfield.
+5. Confirm a central lower return is guarded while both side lanes remain normal drains.

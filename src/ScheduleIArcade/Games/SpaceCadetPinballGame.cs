@@ -16,6 +16,19 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
     private const float Bottom = 26f;
     private const float Top = 452f;
     private const float BallRadius = 5.5f;
+    // A short centre guard rejects a cheap straight-line drain without sealing the normal side
+    // drains. It is deliberately below the flippers, so player timing still matters.
+    private const float DrainGuardLeft = 123f;
+    private const float DrainGuardRight = 197f;
+    private const float DrainGuardY = 31f;
+    private const float MaxStopperSpeed = 380f;
+    // The right side is a real plunger barrel: a launch remains inside it until it clears
+    // the lower sling/target cluster, then a gate feeds it cleanly into the playfield.
+    private const float LaunchBarrelLeft = 271f;
+    private const float LaunchBarrelRight = Right;
+    private const float LaunchBarrelBottom = 38f;
+    private const float LaunchBarrelExitY = 394f;
+    private const float LaunchBallRestY = 58f;
 
     private static readonly Vector2[] Bumpers =
     {
@@ -26,8 +39,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
     private static readonly Vector2[] Targets =
     {
-        new(56f, 365f), new(56f, 316f), new(56f, 267f),
-        new(264f, 365f), new(264f, 316f), new(264f, 267f)
+        new(78f, 365f), new(78f, 316f), new(78f, 267f),
+        new(242f, 365f), new(242f, 316f), new(242f, 267f)
     };
 
     private Texture2D? _texture;
@@ -46,6 +59,7 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
     private int _multiplier;
     private int _targetsLit;
     private bool _waitingToLaunch;
+    private bool _insideLaunchBarrel;
     private bool _gameOver;
 
     public string Id => "space_cadet_pinball";
@@ -142,7 +156,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
     private void PrepareBall()
     {
         _waitingToLaunch = true;
-        _ball = new Vector2(281f, 54f);
+        _insideLaunchBarrel = true;
+        _ball = new Vector2((LaunchBarrelLeft + LaunchBarrelRight) * 0.5f, LaunchBallRestY);
         _velocity = Vector2.zero;
         _ballSaver = 2.5f;
     }
@@ -150,7 +165,9 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
     private void LaunchBall()
     {
         _waitingToLaunch = false;
-        _velocity = new Vector2(-52f, 440f);
+        // This is deliberately stronger than a normal field shot so gravity cannot stall the
+        // ball inside the tall barrel. The gate below converts it back to a calm field speed.
+        _velocity = new Vector2(0f, 560f);
         AddScore(250);
     }
 
@@ -168,11 +185,20 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         _ball += _velocity * dt;
 
         ResolveWalls();
+        TryEnterLaunchBarrel();
+        ResolveLaunchBarrel();
+
+        // Nothing in the playfield may hit the ball while it is still travelling up the
+        // launcher. This prevents the old immediate target/sling collision on launch.
+        if (_insideLaunchBarrel)
+            return;
+
         ResolveBumpers();
         ResolveTargets();
         ResolveSlings();
         ResolveFlipper(new Vector2(96f, 74f), 54f, _leftFlipperAngle, leftPressed, true);
         ResolveFlipper(new Vector2(224f, 74f), 54f, _rightFlipperAngle, rightPressed, false);
+        ResolveDrainGuard();
 
         if (_ball.y < 10f)
         {
@@ -207,12 +233,67 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
             AddScore(100);
         }
 
-        // The launch lane holds the ball only before it has entered the playfield.
-        if (_ball.x > 273f && _ball.y < 210f && _velocity.x > 0f)
+    }
+
+    private void ResolveLaunchBarrel()
+    {
+        if (!_insideLaunchBarrel)
+            return;
+
+        float leftWall = LaunchBarrelLeft + BallRadius;
+        float rightWall = LaunchBarrelRight - BallRadius;
+        if (_ball.x < leftWall)
         {
-            _ball.x = 273f;
-            _velocity.x = -Mathf.Abs(_velocity.x) * 0.7f;
+            _ball.x = leftWall;
+            _velocity.x = Mathf.Abs(_velocity.x) * 0.45f;
         }
+        else if (_ball.x > rightWall)
+        {
+            _ball.x = rightWall;
+            _velocity.x = -Mathf.Abs(_velocity.x) * 0.45f;
+        }
+
+        // A returning ball can fall back into the plunger barrel. Catch it on the spring and
+        // restore the normal Space/Up launch state instead of draining or bouncing forever.
+        if (!_waitingToLaunch && _velocity.y <= 0f && _ball.y <= LaunchBallRestY)
+        {
+            _waitingToLaunch = true;
+            _ball = new Vector2((LaunchBarrelLeft + LaunchBarrelRight) * 0.5f, LaunchBallRestY);
+            _velocity = Vector2.zero;
+            _ballSaver = 2.5f;
+            AddScore(100);
+            return;
+        }
+
+        if (_ball.y < LaunchBarrelBottom + BallRadius)
+        {
+            _ball.y = LaunchBarrelBottom + BallRadius;
+            _velocity.y = Mathf.Abs(_velocity.y) * 0.5f;
+        }
+
+        if (_ball.y < LaunchBarrelExitY || _velocity.y <= 0f)
+            return;
+
+        // The open gate is deliberately above all right-side targets. The ball enters with a
+        // gentle leftward kick, then gravity carries it naturally back through the table.
+        _insideLaunchBarrel = false;
+        _ball = new Vector2(LaunchBarrelLeft - BallRadius - 3f, LaunchBarrelExitY + 5f);
+        _velocity = new Vector2(-170f, Mathf.Clamp(_velocity.y * 0.82f, 260f, 350f));
+        AddScore(500);
+    }
+
+    private void TryEnterLaunchBarrel()
+    {
+        if (_insideLaunchBarrel || _waitingToLaunch || _velocity.y >= 0f)
+            return;
+
+        float leftWall = LaunchBarrelLeft + BallRadius;
+        float rightWall = LaunchBarrelRight - BallRadius;
+        if (_ball.x < leftWall || _ball.x > rightWall || _ball.y > LaunchBarrelExitY + 14f)
+            return;
+
+        _insideLaunchBarrel = true;
+        _ball.x = Mathf.Clamp(_ball.x, leftWall, rightWall);
     }
 
     private void ResolveBumpers()
@@ -227,7 +308,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
             Vector2 normal = distance > 0.001f ? offset / distance : Vector2.up;
             _ball = Bumpers[i] + normal * (radius + BallRadius);
-            _velocity = Vector2.Reflect(_velocity, normal) + normal * 95f;
+            _velocity = Vector2.Reflect(_velocity, normal) + normal * 58f;
+            LimitStopperSpeed();
             if (_bumperCooldowns[i] <= 0f)
             {
                 _bumperCooldowns[i] = 0.12f;
@@ -248,7 +330,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
             Vector2 normal = distance > 0.001f ? offset / distance : Vector2.right;
             _ball = Targets[i] + normal * (radius + BallRadius);
-            _velocity = Vector2.Reflect(_velocity, normal) + normal * 58f;
+            _velocity = Vector2.Reflect(_velocity, normal) + normal * 34f;
+            LimitStopperSpeed();
             if (_targetCooldowns[i] <= 0f)
             {
                 _targetCooldowns[i] = 0.28f;
@@ -266,8 +349,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
     private void ResolveSlings()
     {
-        ResolveCircle(new Vector2(63f, 138f), 20f, 88f, 120);
-        ResolveCircle(new Vector2(257f, 138f), 20f, 88f, 120);
+        ResolveCircle(new Vector2(82f, 138f), 20f, 52f, 120);
+        ResolveCircle(new Vector2(238f, 138f), 20f, 52f, 120);
 
         if (_ball.y > 397f && _ball.x > 84f && _ball.x < 236f)
         {
@@ -286,6 +369,7 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         Vector2 normal = distance > 0.001f ? offset / distance : Vector2.up;
         _ball = center + normal * (radius + BallRadius);
         _velocity = Vector2.Reflect(_velocity, normal) + normal * kick;
+        LimitStopperSpeed();
         AddScore(score);
     }
 
@@ -313,6 +397,29 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
             _flipperCooldown = 0.06f;
             AddScore(10);
         }
+    }
+
+    private void ResolveDrainGuard()
+    {
+        if (_velocity.y >= 0f ||
+            _ball.x < DrainGuardLeft - BallRadius ||
+            _ball.x > DrainGuardRight + BallRadius ||
+            _ball.y > DrainGuardY + BallRadius)
+        {
+            return;
+        }
+
+        _ball.y = DrainGuardY + BallRadius;
+        _velocity.y = Mathf.Max(82f, Mathf.Abs(_velocity.y) * 0.76f);
+        _velocity.x *= 0.92f;
+        LimitStopperSpeed();
+        AddScore(25);
+    }
+
+    private void LimitStopperSpeed()
+    {
+        // Stopper hits should return the ball smoothly, never accumulate unlimited kick energy.
+        _velocity = Vector2.ClampMagnitude(_velocity, MaxStopperSpeed);
     }
 
     private void DrainBall()
@@ -362,8 +469,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         Line(new Vector2(Left + 8f, 155f), new Vector2(78f, 416f), 2, new Color32(100, 63, 255, 255));
         Line(new Vector2(Right - 8f, 155f), new Vector2(242f, 416f), 2, new Color32(100, 63, 255, 255));
         Line(new Vector2(78f, 416f), new Vector2(242f, 416f), 2, new Color32(100, 63, 255, 255));
-        Fill(275, 38, 13, 175, new Color32(18, 43, 73, 255));
-        Frame(274, 36, 15, 179, 2, new Color32(54, 177, 255, 255));
+        Fill(LaunchBarrelLeft, LaunchBarrelBottom, LaunchBarrelRight - LaunchBarrelLeft, LaunchBarrelExitY - LaunchBarrelBottom + 3f, new Color32(7, 30, 68, 255));
+        Frame((int)LaunchBarrelLeft, (int)LaunchBarrelBottom, (int)(LaunchBarrelRight - LaunchBarrelLeft), (int)(LaunchBarrelExitY - LaunchBarrelBottom + 3f), 2, new Color32(54, 177, 255, 255));
     }
 
     private void DrawHud()
@@ -386,6 +493,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
     private void DrawTableArt()
     {
+        DrawPlayfieldScenery();
+
         for (int i = 0; i < Bumpers.Length; i++)
         {
             Color32 outer = _bumperCooldowns[i] > 0f
@@ -405,15 +514,80 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
             Frame((int)Targets[i].x - 7, (int)Targets[i].y - 12, 14, 24, 2, new Color32(230, 244, 255, 255));
         }
 
-        Circle(new Vector2(63f, 138f), 20, new Color32(210, 53, 111, 255));
-        Ring(new Vector2(63f, 138f), 20, 3, new Color32(255, 214, 96, 255));
-        Circle(new Vector2(257f, 138f), 20, new Color32(210, 53, 111, 255));
-        Ring(new Vector2(257f, 138f), 20, 3, new Color32(255, 214, 96, 255));
+        Circle(new Vector2(82f, 138f), 20, new Color32(210, 53, 111, 255));
+        Ring(new Vector2(82f, 138f), 20, 3, new Color32(255, 214, 96, 255));
+        Circle(new Vector2(238f, 138f), 20, new Color32(210, 53, 111, 255));
+        Ring(new Vector2(238f, 138f), 20, 3, new Color32(255, 214, 96, 255));
 
         DrawFlipper(new Vector2(96f, 74f), 54f, _leftFlipperAngle, new Color32(255, 105, 76, 255));
         DrawFlipper(new Vector2(224f, 74f), 54f, _rightFlipperAngle, new Color32(255, 105, 76, 255));
         Circle(new Vector2(96f, 74f), 10, new Color32(234, 238, 248, 255));
         Circle(new Vector2(224f, 74f), 10, new Color32(234, 238, 248, 255));
+
+        // Visible short guard rail at the lower centre. The open left/right lanes still drain,
+        // but a normal central return is deflected back toward the flippers.
+        Line(new Vector2(DrainGuardLeft, DrainGuardY), new Vector2(DrainGuardRight, DrainGuardY), 8, new Color32(20, 34, 76, 255));
+        Line(new Vector2(DrainGuardLeft, DrainGuardY), new Vector2(DrainGuardRight, DrainGuardY), 3, new Color32(92, 220, 255, 255));
+        Circle(new Vector2(DrainGuardLeft, DrainGuardY), 5, new Color32(255, 218, 96, 255));
+        Circle(new Vector2(DrainGuardRight, DrainGuardY), 5, new Color32(255, 218, 96, 255));
+
+        DrawLaunchBarrel();
+    }
+
+    private void DrawPlayfieldScenery()
+    {
+        // A deterministic star field keeps the table richly textured without shimmering from
+        // frame to frame. Gameplay components are drawn after it and stay perfectly readable.
+        for (int i = 0; i < 58; i++)
+        {
+            int x = 34 + (i * 47 % 226);
+            int y = 118 + (i * 71 % 296);
+            int size = i % 11 == 0 ? 3 : i % 4 == 0 ? 2 : 1;
+            Color32 colour = i % 3 == 0
+                ? new Color32(106, 104, 255, 255)
+                : new Color32(122, 227, 255, 255);
+            Fill(x, y, size, size, colour);
+        }
+
+        // Layered orbital guides, a planet, and banks of lamps make the playfield feel like a
+        // proper arcade table rather than a bare collision board.
+        Circle(new Vector2(160f, 397f), 25, new Color32(20, 45, 111, 255));
+        Ring(new Vector2(160f, 397f), 25, 3, new Color32(82, 221, 255, 255));
+        Ring(new Vector2(160f, 397f), 17, 2, new Color32(245, 92, 181, 255));
+        Circle(new Vector2(153f, 405f), 7, new Color32(92, 157, 249, 255));
+        Circle(new Vector2(166f, 390f), 4, new Color32(255, 220, 96, 255));
+        Line(new Vector2(43f, 204f), new Vector2(111f, 231f), 4, new Color32(22, 69, 137, 255));
+        Line(new Vector2(277f, 204f), new Vector2(209f, 231f), 4, new Color32(22, 69, 137, 255));
+        Line(new Vector2(43f, 204f), new Vector2(111f, 231f), 1, new Color32(80, 235, 255, 255));
+        Line(new Vector2(277f, 204f), new Vector2(209f, 231f), 1, new Color32(80, 235, 255, 255));
+
+        for (int i = 0; i < 7; i++)
+        {
+            float y = 172f + i * 32f;
+            Circle(new Vector2(43f, y), 4, i % 2 == 0 ? new Color32(255, 93, 175, 255) : new Color32(86, 231, 255, 255));
+            Circle(new Vector2(277f, y), 4, i % 2 == 0 ? new Color32(86, 231, 255, 255) : new Color32(255, 93, 175, 255));
+        }
+
+        DrawTextCentered("ORBIT", 221, 1, new Color32(163, 224, 255, 255));
+        DrawTextCentered("STAR GATE", 407, 1, new Color32(255, 226, 96, 255));
+    }
+
+    private void DrawLaunchBarrel()
+    {
+        float centerX = (LaunchBarrelLeft + LaunchBarrelRight) * 0.5f;
+        Line(new Vector2(LaunchBarrelLeft + 4f, LaunchBarrelBottom + 8f), new Vector2(LaunchBarrelLeft + 4f, LaunchBarrelExitY - 5f), 2, new Color32(126, 236, 255, 255));
+        Line(new Vector2(LaunchBarrelRight - 4f, LaunchBarrelBottom + 8f), new Vector2(LaunchBarrelRight - 4f, LaunchBarrelExitY - 5f), 2, new Color32(126, 236, 255, 255));
+
+        for (int i = 0; i < 9; i++)
+        {
+            float y = 73f + i * 34f;
+            Circle(new Vector2(centerX, y), 3, i % 2 == 0 ? new Color32(255, 218, 88, 255) : new Color32(255, 79, 153, 255));
+        }
+
+        // The sloped exit is visualised as a one-way gate feeding left into the active table.
+        Line(new Vector2(LaunchBarrelLeft, LaunchBarrelExitY), new Vector2(LaunchBarrelLeft - 19f, LaunchBarrelExitY + 15f), 4, new Color32(25, 62, 125, 255));
+        Line(new Vector2(LaunchBarrelLeft, LaunchBarrelExitY), new Vector2(LaunchBarrelLeft - 19f, LaunchBarrelExitY + 15f), 2, new Color32(255, 222, 97, 255));
+        DrawText("FIRE", (int)LaunchBarrelLeft + 1, 46, 1, new Color32(230, 246, 255, 255));
     }
 
     private void DrawBall()

@@ -1,0 +1,23 @@
+SCHEDULE I ARCADE M2.63 - PINBALL LAUNCH BARREL AND PLAYFIELD ART
+
+Purpose
+-------
+Give every new ball a reliable protected launch path and make the playable Space Cadet table feel
+like a fuller, more tactile arcade pinball game.
+
+Test flow
+---------
+1. Start any pinball machine and press Space to launch.
+2. Watch the ball travel vertically inside the illuminated right-side plunger barrel.
+   - It must not touch a sling or target while it is in the barrel.
+   - It must not bounce sideways out of the barrel.
+3. At the top gate, confirm the ball receives a gentle leftward feed into the open playfield.
+   - The first launch path must clear the right target bank and lower sling.
+4. Let the ball play through the target banks and both slings.
+   - Both banks should be visible farther in from the side walls.
+   - The ball should retain normal bumper, target, flipper, centre-guard, and side-drain behaviour.
+5. Inspect the screen while playing.
+   - Confirm the starfield, orbit rails, star gate, alternating side lamps, planet, and lit launch barrel draw cleanly.
+   - Confirm the artwork stays behind the ball and interactive play components.
+6. Verify all four pinballs still have their playable screens flush to the physical playfield glass,
+   with pinballs 3 and 4 upright and not mirrored.

@@ -41,7 +41,9 @@ internal sealed class CabinetRegistryService
                         : suffix.Equals("02", StringComparison.OrdinalIgnoreCase)
                             ? "doom2"
                             : Constants.DefaultGameId;
-            _cabinets.Add(new ArcadeCabinet(suffix, transform.gameObject, screen, gameId));
+            var cabinet = new ArcadeCabinet(suffix, transform.gameObject, screen, gameId);
+            CreateStandingInteractionHotspot(cabinet);
+            _cabinets.Add(cabinet);
             MelonLogger.Msg($"Registered arcade cabinet {suffix} -> {gameId}.");
         }
 
@@ -59,6 +61,47 @@ internal sealed class CabinetRegistryService
             current = current.parent;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Returns a player-height target for the interaction cone. The real rendered playfield is
+    /// low on cocktail and pinball machines; raising only the aim target lets a standing player
+    /// interact naturally without moving the physical screen or loosening the close-range rule.
+    /// </summary>
+    public static Vector3 GetStandingInteractionFocus(ArcadeCabinet cabinet)
+    {
+        Vector3 focus = cabinet.ScreenRenderer.bounds.center;
+        if (cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
+            focus.y += 0.46f;
+        else if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
+            focus.y += 0.34f;
+        return focus;
+    }
+
+    private static void CreateStandingInteractionHotspot(ArcadeCabinet cabinet)
+    {
+        // Imported props have low/split source colliders, so direct screen rays can miss them at
+        // normal eye height. This trigger is intentionally invisible and non-blocking; it only
+        // receives the explicit arcade interaction ray and remains a child when the machine moves.
+        var hotspot = new GameObject("__ArcadeInteraction_" + cabinet.Id);
+        hotspot.transform.SetParent(cabinet.Root.transform, false);
+        hotspot.transform.position = GetStandingInteractionFocus(cabinet);
+        hotspot.transform.rotation = Quaternion.identity;
+        hotspot.transform.localScale = Vector3.one;
+
+        Vector3 size;
+        if (cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
+            size = new Vector3(1.20f, 0.72f, 1.16f);
+        else if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
+            size = new Vector3(1.45f, 0.62f, 1.20f);
+        else if (cabinet.Id.Equals("TV", StringComparison.OrdinalIgnoreCase))
+            size = new Vector3(1.72f, 1.02f, 0.55f);
+        else
+            size = new Vector3(0.92f, 0.70f, 0.78f);
+
+        var collider = hotspot.AddComponent<BoxCollider>();
+        collider.size = size;
+        collider.isTrigger = true;
     }
 
     private static Renderer? FindScreen(Transform cabinetRoot, string suffix)

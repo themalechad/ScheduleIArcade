@@ -1,0 +1,7 @@
+SCHEDULE I ARCADE M2.61 - PINBALL 3/4 GLASS FIT
+
+1. Restart Schedule I after installing this build and compare pinballs 3 and 4 to pinballs 1 and 2 from the player side.
+2. Confirm displays 3 and 4 follow their own physical playfield-glass slope from backboard toward the front rail, matching the real asset plane rather than lying on the opposite tilt.
+3. Check both left/right edges and both front/back edges of each screen. The displays must remain inside the real playfield rails with only the small anti-z-fighting gap above the glass.
+4. Start pinballs 3 and 4 and verify their Space Cadet text remains upright/readable while their display remains flush to the glass.
+5. Reconfirm the centre drain guard and all passive stopper collisions return the ball smoothly.

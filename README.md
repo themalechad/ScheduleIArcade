@@ -1,4 +1,81 @@
-# Schedule I Arcade M2.56
+# Schedule I Arcade M2.64
+
+M2.64 embeds the custom interior inside Schedule I's real Arcade building at
+`(-44.7, -2.9, 136.7)`, aligned to the native building's 180-degree orientation found in the
+ripped Main scene. The generated double doors now overlap behind a finished centre seal, removing
+the visible slit between their leaves.
+
+The Space Cadet plunger is stronger and reusable: a returning ball that falls into the right-side
+barrel is caught on the spring and can be fired again with Space or Up. Imported pinballs now use
+rounded lower-body collision instead of a sharp box around their entire mesh, so players can walk
+around close machine rows without becoming wedged. Pac-Man now receives the same eased grid-cell
+interpolation as the ghosts and renders at 60 Hz.
+
+See TEST_M2.64.txt for the focused regression pass.
+
+## M2.63
+
+M2.63 rebuilds the Space Cadet launch as a full protected right-side plunger barrel. The ball is
+now held clear of the sling and target bank until it reaches a high exit gate, which feeds it
+smoothly into the playfield. Both target banks and lower slings are moved inward to preserve that
+clear route. The game screen also receives a denser arcade treatment: starfield texture, orbital
+guides, lamp banks, a star gate, and illuminated launch-barrel details.
+
+See TEST_M2.63.txt for the focused regression pass.
+
+## M2.62
+
+M2.62 rotates the 3/4 display texture frames 180 degrees around their already-correct mirrored
+glass normal. This makes Space Cadet text upright while retaining the flush physical-glass fit
+introduced for those two machines.
+
+See TEST_M2.62.txt for the focused regression pass.
+
+## M2.61
+
+M2.61 measures the actual mirrored playfield glass on pinballs 3 and 4 and seats their displays
+on that `+X` slope and centre. Their live play view now follows the real asset glass rather than
+floating above the wrong opposing plane; pinballs 1 and 2 retain their measured `-X` fit.
+
+See TEST_M2.61.txt for the focused regression pass.
+
+## M2.60
+
+M2.60 retunes passive pinball collisions for smoother, calmer motion. Bumpers, targets, slings,
+and the centre drain guard now use smaller return impulses with a shared speed ceiling, preventing
+stopper hits from stacking into an unnaturally fast ball while keeping launch and flipper shots
+responsive.
+
+See TEST_M2.60.txt for the focused regression pass.
+
+## M2.59
+
+M2.59 unifies the live display plane axes and U direction across all four pinballs, so machines 3
+and 4 now match the upright screen orientation and aligned glass presentation of machines 1 and 2.
+The playable Space Cadet table gains a small, visible centre drain guard below the flippers: it
+deflects straight centre returns, while leaving both side lanes open for normal ball drains.
+
+See TEST_M2.59.txt for the focused regression pass.
+
+## M2.58
+
+M2.58 turns only the live display planes on pinballs 3 and 4 by 180 degrees within their sloped
+playfield glass. Their cabinets, controls, placement, and glass-fit sizing are unchanged; their
+Space Cadet display now has the same orientation as pinballs 1 and 2.
+
+See TEST_M2.58.txt for the focused regression pass.
+
+## M2.57
+
+M2.57 makes every playable machine practical to use while standing. Each cabinet now receives an
+invisible, non-blocking interaction zone at the correct screen or playfield height; the interaction
+ray explicitly includes those zones. A close, narrow aim cone around the live screen/playfield is
+the backup for gaps in the imported mesh colliders. Prompts remain proximity- and vision-based, but
+no longer require crouching to target low source geometry.
+
+See TEST_M2.57.txt for the focused regression pass.
+
+## M2.56
 
 M2.56 replaces the incompatible AC/DC source texture on all four physical pinballs with a unified
 Space Cadet sci-fi pinball skin. It deliberately has no baked lettering, so the source mesh's

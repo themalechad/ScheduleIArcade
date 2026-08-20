@@ -34,12 +34,49 @@ internal sealed class CabinetInteractionService
             return;
 
         var ray = new Ray(camera.transform.position, camera.transform.forward);
-        if (!Physics.Raycast(ray, out RaycastHit hit, Constants.InteractionDistance))
-            return;
+        if (Physics.Raycast(
+                ray,
+                out RaycastHit hit,
+                Constants.InteractionDistance,
+                Physics.DefaultRaycastLayers,
+                QueryTriggerInteraction.Collide))
+        {
+            _lookedAt = _registry.Resolve(hit.collider);
+        }
 
-        _lookedAt = _registry.Resolve(hit.collider);
+        // Keep a tight look cone as a fallback for source-mesh collider gaps. This uses the live
+        // screen/playfield position and normal standing aim height, so it works after players move
+        // an arcade asset and never requires crouching to hit a low imported collider.
+        _lookedAt ??= ResolveStandingAim(camera);
         if (_lookedAt != null && Input.GetKeyDown(KeyCode.E))
             _session.Start(_lookedAt);
+    }
+
+    private ArcadeCabinet? ResolveStandingAim(Camera camera)
+    {
+        const float minimumFacingDot = 0.955f; // ~17 degrees; deliberate but not pixel-perfect.
+        ArcadeCabinet? best = null;
+        float bestDot = minimumFacingDot;
+
+        foreach (ArcadeCabinet cabinet in _registry.Cabinets)
+        {
+            if (!cabinet.Root.activeInHierarchy)
+                continue;
+
+            Vector3 toFocus = CabinetRegistryService.GetStandingInteractionFocus(cabinet) - camera.transform.position;
+            float distance = toFocus.magnitude;
+            if (distance < 0.05f || distance > Constants.InteractionDistance)
+                continue;
+
+            float facing = Vector3.Dot(camera.transform.forward.normalized, toFocus / distance);
+            if (facing > bestDot)
+            {
+                best = cabinet;
+                bestDot = facing;
+            }
+        }
+
+        return best;
     }
 
     public void OnGUI()

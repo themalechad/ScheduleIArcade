@@ -7,6 +7,11 @@ namespace ScheduleIArcade.Services;
 
 internal sealed class ArcadeLocationService : IDisposable
 {
+    // Ripped Main.unity places the native Arcade building at (-48,-4,141.5) with a 180-degree
+    // rotation. This user-supplied point is the usable interior alignment inside that shell.
+    private static readonly Vector3 NativeArcadeInteriorPosition = new(-48.4f, -3.8f, 141.4f);
+    private const float NativeArcadeInteriorYaw = 180f;
+
     private readonly AssetBundleService _assets;
     private readonly ArcadePreferences _preferences;
     private readonly RawArcadeSceneService _rawScene = new();
@@ -33,7 +38,10 @@ internal sealed class ArcadeLocationService : IDisposable
         var prefab = _assets.LoadRoomPrefab();
         if (prefab != null)
         {
-            RoomInstance = UnityEngine.Object.Instantiate(prefab, _preferences.RoomPosition, Quaternion.identity);
+            RoomInstance = UnityEngine.Object.Instantiate(
+                prefab,
+                NativeArcadeInteriorPosition,
+                Quaternion.Euler(0f, NativeArcadeInteriorYaw, 0f));
             RoomInstance.name = "ScheduleIArcade_Runtime";
             UsingProceduralFallback = false;
             UsingRawScene = false;
@@ -51,7 +59,7 @@ internal sealed class ArcadeLocationService : IDisposable
             }
             else
             {
-                MelonLogger.Msg($"Arcade room spawned from AssetBundle at {_preferences.RoomPosition}.");
+                MelonLogger.Msg($"Arcade room spawned inside the native Arcade building at {NativeArcadeInteriorPosition}.");
                 return true;
             }
         }
@@ -61,7 +69,8 @@ internal sealed class ArcadeLocationService : IDisposable
             try
             {
                 var root = new GameObject("ScheduleIArcade_RawImportedRoom");
-                root.transform.position = _preferences.RoomPosition;
+                root.transform.position = NativeArcadeInteriorPosition;
+                root.transform.rotation = Quaternion.Euler(0f, NativeArcadeInteriorYaw, 0f);
                 if (_rawScene.TryPopulate(root, out Transform? rawSpawn, out Transform? rawExit) && rawSpawn != null && rawExit != null)
                 {
                     RoomInstance = root;
@@ -185,9 +194,8 @@ internal sealed class ArcadeLocationService : IDisposable
     }
 
     /// <summary>
-    /// Moves the procedural pocket interior away from the playable map without putting it in
-    /// the sky. The room keeps the same Y elevation as the real Arcade entrance, so even a
-    /// physics hiccup cannot turn into a 300-metre fall back to the map.
+    /// Keeps the real textured room embedded in the native Arcade building. Only the emergency
+    /// procedural fallback is moved to an isolated same-elevation pocket.
     /// </summary>
     public bool PrepareForEntry(Vector3 exteriorAnchor)
     {
@@ -197,28 +205,28 @@ internal sealed class ArcadeLocationService : IDisposable
         if ((!UsingProceduralFallback && !UsingRawScene) || _entryAnchorPrepared)
             return true;
 
-        // A 1000 m horizontal offset isolates the pocket interior while keeping better physics/render precision than the old 2500 m test offset.
-        // We intentionally ignore the old persisted RoomY=300 development preference here.
-        // M2.37 moves the entrance onto the diagonal north-west chamfer. The chamfer's inward
-        // normal is roughly (+X,-Z) in room-local space. Rotating the room ~177 degrees maps that
-        // inward direction to north-west in world space, so the player's preserved exterior yaw
-        // still points naturally into the arcade after teleporting through the door.
         if (UsingRawScene)
-            RoomInstance.transform.rotation = Quaternion.Euler(0f, 177f, 0f);
-
-        RoomInstance.transform.position = new Vector3(
-            exteriorAnchor.x + 1000f,
-            exteriorAnchor.y,
-            exteriorAnchor.z + 1000f);
+        {
+            RoomInstance.transform.rotation = Quaternion.Euler(0f, NativeArcadeInteriorYaw, 0f);
+            RoomInstance.transform.position = NativeArcadeInteriorPosition;
+        }
+        else
+        {
+            // A 1000 m horizontal offset isolates the fallback without the old 300 m sky spawn.
+            RoomInstance.transform.position = new Vector3(
+                exteriorAnchor.x + 1000f,
+                exteriorAnchor.y,
+                exteriorAnchor.z + 1000f);
+        }
 
         // The room and all primitive colliders moved this frame. Force Unity's physics world to
         // see the new transforms before ArcadeEntranceService teleports the player onto the floor.
         Physics.SyncTransforms();
 
         _entryAnchorPrepared = true;
-        string source = UsingRawScene ? "real textured arcade" : "procedural arcade";
+        string source = UsingRawScene ? "real textured arcade embedded in native building" : "procedural arcade";
         if (UsingRawScene)
-            MelonLogger.Msg($"{source} anchored at {RoomInstance.transform.position} and rotated 135° so the north-wall double-door entry continues the player's NW facing direction.");
+            MelonLogger.Msg($"{source} anchored at {RoomInstance.transform.position} and aligned to {NativeArcadeInteriorYaw:0} degrees.");
         else
             MelonLogger.Msg($"{source} anchored at safe same-elevation pocket position {RoomInstance.transform.position}.");
         return true;

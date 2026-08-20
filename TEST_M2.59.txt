@@ -1,0 +1,8 @@
+SCHEDULE I ARCADE M2.59 - PINBALL ALIGNMENT + DRAIN GUARD
+
+1. Restart Schedule I after installing this build and enter the arcade.
+2. Compare pinballs 1 through 4 from the player side. All four live Space Cadet titles, score text, and controls must be upright, readable, and aligned to their own sloped glass.
+3. Confirm pinballs 3 and 4 are not mirrored, upside down, or offset outside their playfield rails.
+4. Start any pinball game, launch the ball, and intentionally allow a straight centre return below the flippers. Confirm the short cyan/yellow centre guard bounces it upward instead of immediately draining a ball.
+5. Let the ball pass through either lower side lane. Confirm side drains still work and a life is lost normally after the launch saver period ends.
+6. Confirm flipper controls, bumpers, targets, score, and the standing E prompt still work.

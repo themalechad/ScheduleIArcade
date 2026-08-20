@@ -1,0 +1,6 @@
+SCHEDULE I ARCADE M2.62 - PINBALL 3/4 UPRIGHT GLASS SCREENS
+
+1. Restart Schedule I after installing this build and inspect pinballs 3 and 4 from the player side.
+2. Confirm the live Space Cadet title, score, and controls are upright and readable.
+3. Confirm their displays still follow the exact physical sloped-glass plane: no vertical lift, sinking, clipping, or crossing the playfield rails.
+4. Compare against pinballs 1 and 2. All four playable displays should have the same upright visual orientation while each remains fitted to its own glass.

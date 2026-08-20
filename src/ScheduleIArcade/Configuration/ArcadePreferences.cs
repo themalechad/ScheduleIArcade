@@ -18,11 +18,11 @@ internal sealed class ArcadePreferences
     {
         _category = MelonPreferences.CreateCategory("ScheduleIArcade");
         _debug = _category.CreateEntry("DebugLogs", false, "Debug Logs");
-        _roomX = _category.CreateEntry("RoomX", 0f, "Custom arcade X");
-        _roomY = _category.CreateEntry("RoomY", 300f, "Custom arcade Y");
-        _roomZ = _category.CreateEntry("RoomZ", 0f, "Custom arcade Z");
+        _roomX = _category.CreateEntry("RoomX", -49.1f, "Custom arcade X");
+        _roomY = _category.CreateEntry("RoomY", -2.9f, "Custom arcade Y");
+        _roomZ = _category.CreateEntry("RoomZ", 144.0f, "Custom arcade Z");
         _ambienceEnabled = _category.CreateEntry("AmbienceEnabled", true, "Arcade Ambience Enabled");
-        _ambienceVolume = _category.CreateEntry("AmbienceVolume", 0.35f, "Arcade Ambience Volume");
+        _ambienceVolume = _category.CreateEntry("AmbienceVolume", 0.25f, "Arcade Ambience Volume");
         _ambienceFadeSeconds = _category.CreateEntry("AmbienceFadeSeconds", 1.25f, "Arcade Ambience Fade Seconds");
         _category.SaveToFile(false);
     }
