@@ -3,7 +3,7 @@ SCHEDULE I ARCADE - BLENDER EDITING (M2.38)
 Blender is now a supported layout editor for the raw runtime scene.
 
 FIRST TIME
-1. Double-click OPEN_ARCADE_IN_BLENDER.cmd.
+1. Open BlenderEditable/ScheduleIArcade_Editable.blend directly in Blender 4.3.
 2. The script imports UnityAssetsToCopy/Assets/ScheduleIArcade/Source/arcade.fbx.
 3. It relinks the supplied textures, hides the placeholder crane/vending meshes, creates clean pivots,
    applies the corrected M2.37 starting layout, and saves:
@@ -22,7 +22,7 @@ EDITING
 USING YOUR EDITS IN GAME
 1. SAVE the .blend in Blender (Ctrl+S).
 2. Close Blender or leave it open.
-3. Run BUILD_AND_INSTALL.cmd.
+3. Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Build-And-Install.ps1` from the repository root.
 4. Build-And-Install automatically detects BlenderEditable/ScheduleIArcade_Editable.blend and Blender.exe.
 5. Blender runs headless for a moment and rewrites the runtime mesh package as version 2.
 6. Launch Schedule I. The log should say:

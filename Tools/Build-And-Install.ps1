@@ -86,7 +86,7 @@ function Resolve-Net6ReferencePack([string]$DotNetExe) {
         if (Test-Path $ref) { return $ref }
     }
 
-    throw "The .NET 6 targeting pack is missing. Install the .NET 6 SDK, then run BUILD_AND_INSTALL.cmd again."
+    throw "The .NET 6 targeting pack is missing. Install the .NET 6 SDK, then rerun Tools\\Build-And-Install.ps1."
 }
 
 
