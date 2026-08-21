@@ -1,8 +1,0 @@
-M2.11 TEST
-
-1. Build/install with BUILD_AND_INSTALL.cmd.
-2. Enter the real textured arcade.
-3. Walk to the generated west and north walls and check that the purple floor now reaches underneath them with no visible gap.
-4. Check the corner where those two generated walls meet; they now overlap slightly.
-5. Walk to the real gray exit door. The [E] Exit Arcade prompt should appear clearly above the hotbar instead of being partially hidden by it.
-6. Confirm the real gray door still exits back to the vanilla Arcade entrance.

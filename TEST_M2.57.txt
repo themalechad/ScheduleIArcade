@@ -1,9 +1,0 @@
-SCHEDULE I ARCADE M2.57 - STANDING ARCADE PROMPTS
-
-1. Restart Schedule I after installing this build and enter the custom arcade.
-2. Without crouching, stand within 2.35m of the Arcade TV and look at the monitor. Confirm its E play prompt appears and starts Pong/Snake.
-3. Without crouching, aim at either Doom monitor. Confirm the matching E prompt appears and starts the correct cabinet session.
-4. Stand in front of each Space Cadet pinball and aim naturally at its raised playfield/upper cabinet area. Confirm the E prompt appears without looking at the legs or floor.
-5. Stand beside the Pac-Man cocktail table and aim naturally at the tabletop. Confirm its E prompt appears without crouching.
-6. For each machine, turn 20 degrees away, look at an adjacent wall, or step farther than 2.35m away. Confirm the prompt disappears and E no longer starts that game.
-7. Pick up, rotate, and place one machine. Recheck that its standing-height E prompt follows it to the new location.

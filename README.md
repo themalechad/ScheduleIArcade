@@ -146,7 +146,6 @@ MelonLoader stores the `ScheduleIArcade` preference category in its normal prefe
 - `BlenderEditable/` — tracked editable arcade layout.
 - `BlenderTools/` — deterministic export and layout validation tools.
 - `dist/Mods/ScheduleIArcade/Assets/` — runtime scene, textures, ambience, and compatible sprites.
-- `TEST_M2.*.txt` — focused regression notes for development milestones.
 
 ## Troubleshooting
 

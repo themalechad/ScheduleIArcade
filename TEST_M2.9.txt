@@ -1,9 +1,0 @@
-M2.10 TEST
-1. Run BUILD_AND_INSTALL.cmd.
-2. Launch Schedule I and enter through the vanilla Arcade door.
-3. Confirm you spawn standing on the floor, just inside the visible gray interior door.
-4. Confirm there is no open sky on the two previously missing wall sides.
-5. Walk into both new walls and confirm collision.
-6. Walk back to the visible gray door; [E] Exit Arcade should appear there.
-7. Exit and re-enter to confirm repeat entry still works.
-8. Check that cabinet/environment textures are less washed out and remain the original source resolution.

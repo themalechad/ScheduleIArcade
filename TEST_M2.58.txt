@@ -1,6 +1,0 @@
-SCHEDULE I ARCADE M2.58 - PINBALL 3/4 SCREEN TURN
-
-1. Restart Schedule I after installing this build and enter the arcade.
-2. Compare the live Space Cadet screen on pinball 1 with pinballs 3 and 4 from the player side.
-3. Confirm pinballs 3 and 4 display text, score, and controls have the same upright orientation as pinball 1; no mirror or upside-down view remains.
-4. Confirm pinballs 3 and 4 still face the arcade, their screens remain fitted inside their playfield rails, and E works while standing.

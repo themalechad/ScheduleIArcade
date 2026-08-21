@@ -1,8 +1,0 @@
-SCHEDULE I ARCADE M2.51 - DOOM SCREEN ORIENTATION
-
-1. Restart Schedule I with both Doom TV mods installed.
-2. Enter the custom arcade and stand in front of the two upright cabinets.
-3. Confirm the visible DOOM I and DOOM II marquee, control-panel, and fitted CRT text all read left-to-right.
-4. Aim at DOOM I and press E. Confirm the camera moves in front of its CRT, the room remains visible around the bezel, and the Doom I frame is visible.
-5. Press Escape. Repeat for DOOM II.
-6. Confirm neither session places the camera at a cabinet side, inside the cabinet, or outside the arcade.

@@ -1,9 +1,0 @@
-M2.12 TEST
-
-1. Build/install with BUILD_AND_INSTALL.cmd.
-2. Enter the real textured arcade.
-3. Walk through the center gap shown in the M2.11 screenshot (between the tabletop/pinball/air-hockey area).
-4. Confirm the player no longer gets wedged around the small white decorative prop.
-5. Walk around all machines: machines should still block the player, but passages should have more clearance.
-6. Confirm the gray door still shows [E] Exit Arcade and exits normally.
-7. Confirm the two generated missing walls and floor extensions remain solid.

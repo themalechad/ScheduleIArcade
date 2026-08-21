@@ -1,8 +1,0 @@
-SCHEDULE I ARCADE M2.56 - SPACE CADET PINBALL SKIN
-
-1. Restart Schedule I after installing this build.
-2. Inspect pinballs 1 through 4 from the player side. Each physical backbox, cabinet, and playfield must use the unified blue-and-cyan Space Cadet sci-fi pinball skin; no AC/DC text or artwork may remain.
-3. Confirm the physical skins remain visually coherent around cabinet sides, legs, and playfields, even where the imported mesh mirrors its UVs.
-4. Start pinballs 1 and 2. Their live Space Cadet display text must read normally and remain centered on the sloped glass.
-5. Start pinballs 3 and 4 beside the Doom cabinets. Their live Space Cadet display text must read normally (not mirrored), fill the larger glass area, and stay inside the playfield rails.
-6. Reconfirm pinballs 3 and 4 face into the arcade and that Pac-Man ghosts still move smoothly between maze cells.
