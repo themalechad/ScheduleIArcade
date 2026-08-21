@@ -1,0 +1,15 @@
+SCHEDULE I ARCADE M2.65 - PAID PLAY REGRESSION
+
+1. Load a save and enter the arcade through the vanilla Arcade door.
+2. Approach every playable machine while looking directly at it. Confirm its prompt says $10 CASH.
+3. Confirm the Arcade TV, Pac-Man table, four pinballs, and ready/test Doom cabinets show $10 on their attract screens.
+4. With less than $10 cash, press E on each machine. Confirm play does not start and no cash is removed.
+5. With exactly $10 cash, press E on each machine. Confirm the session starts and the cash HUD reaches $0 once.
+6. Exit with Escape. Confirm exiting, looking at, picking up, rotating, placing, or cancelling a machine takes no additional cash.
+7. Start a machine with more than $10. Confirm exactly $10 is deducted, never $20 from one key press.
+8. Temporarily force a game startup exception during development. Confirm the prompt reports a refund and the $10 returns.
+9. Confirm all game controls, camera lock, phone/hotbar lock, placement, entry, exits, and ambience still work.
+
+BUILD CHECK
+- Tools/Build-And-Install.ps1 -BuildOnly must pass Blender layout QA and C# compilation.
+- Installed and repository-built DLL SHA-256 hashes must match before release.

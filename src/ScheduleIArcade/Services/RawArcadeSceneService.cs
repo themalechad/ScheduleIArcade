@@ -1456,7 +1456,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             "ScheduleIArcade_M_TvStandby",
             "__arcade_tv_standby",
             "ARCADE TV",
-            "PRESS E",
+            "$10 PLAY",
             new Color32(22, 230, 255, 255),
             new Color32(255, 55, 155, 255));
     }
@@ -1499,7 +1499,7 @@ internal sealed class RawArcadeSceneService : IDisposable
                     "ScheduleIArcade_M_CabinetScreen" + suffix,
                     "__arcade_cabinet_standby_" + suffix,
                     doomReady ? (index == 1 ? "DOOM I" : "DOOM II") : "TEST MODE",
-                    doomReady ? "PRESS E" : "DOOM MOD NOT READY",
+                    doomReady ? "$10 PLAY" : "$10 TEST",
                     doomReady
                         ? (index == 1 ? new Color32(255, 79, 28, 255) : new Color32(255, 58, 58, 255))
                         : new Color32(60, 190, 255, 255),
@@ -1559,7 +1559,7 @@ internal sealed class RawArcadeSceneService : IDisposable
                 "ScheduleIArcade_M_PacmanCocktailScreen",
                 "__arcade_pacman_standby",
                 "PAC-MAN",
-                "PRESS E",
+                "$10 PLAY",
                 new Color32(255, 224, 42, 255),
                 new Color32(52, 110, 255, 255));
 
@@ -1615,7 +1615,7 @@ internal sealed class RawArcadeSceneService : IDisposable
                     "ScheduleIArcade_M_PinballScreen" + index,
                     "__arcade_pinball_standby_" + index,
                     "SPACE CADET",
-                    "PRESS E",
+                    "$10 PLAY",
                     new Color32(82, 207, 255, 255),
                     new Color32(255, 218, 96, 255));
         }

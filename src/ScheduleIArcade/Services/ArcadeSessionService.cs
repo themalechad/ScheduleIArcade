@@ -1,4 +1,5 @@
 using MelonLoader;
+using Il2CppScheduleOne.Money;
 using ScheduleIArcade.Games;
 using ScheduleIArcade.Models;
 using UnityEngine;
@@ -7,6 +8,8 @@ namespace ScheduleIArcade.Services;
 
 internal sealed class ArcadeSessionService : IDisposable
 {
+    public const float PlayPrice = 10f;
+
     private readonly ArcadeGameRegistry _games;
     private readonly ArcadeTvViewService _tvView = new();
     private IArcadeGame? _activeGame;
@@ -20,22 +23,47 @@ internal sealed class ArcadeSessionService : IDisposable
 
     public bool IsPlaying => _activeGame != null;
     public ArcadeCabinet? ActiveCabinet => _activeCabinet;
+    public string LastStartFailure { get; private set; } = string.Empty;
 
     public bool Start(ArcadeCabinet cabinet)
     {
+        LastStartFailure = string.Empty;
         if (IsPlaying || cabinet.IsOccupied)
+        {
+            LastStartFailure = "MACHINE IN USE";
             return false;
+        }
 
         if (!_games.TryCreate(cabinet.GameId, out var game) || game == null)
         {
+            LastStartFailure = "MACHINE IS NOT READY";
             MelonLogger.Error($"No arcade game runtime is registered for '{cabinet.GameId}'.");
             return false;
         }
 
+        MoneyManager? money = MoneyManager.Instance;
+        if (money == null)
+        {
+            LastStartFailure = "CASH SYSTEM NOT READY — TRY AGAIN";
+            game.Dispose();
+            return false;
+        }
+
+        float availableCash = money.cashBalance;
+        if (availableCash + 0.001f < PlayPrice)
+        {
+            LastStartFailure = $"NOT ENOUGH CASH — ${availableCash:0.00} AVAILABLE";
+            game.Dispose();
+            return false;
+        }
+
+        bool paymentTaken = false;
         try
         {
             game.Initialize();
             game.Start();
+            money.ChangeCashBalance(-PlayPrice, visualizeChange: true, playCashSound: true);
+            paymentTaken = true;
             _screenMaterial = cabinet.ScreenRenderer.material;
             CaptureOriginalScreen(_screenMaterial);
             ApplyTexture(_screenMaterial, game.ScreenTexture);
@@ -49,12 +77,32 @@ internal sealed class ArcadeSessionService : IDisposable
                 cabinet.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase) ||
                 cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
                 _tvView.Enter(cabinet);
-            MelonLogger.Msg($"Started {game.DisplayName} on cabinet {cabinet.Id}.");
+            MelonLogger.Msg($"Started {game.DisplayName} on cabinet {cabinet.Id} after a ${PlayPrice:0.00} cash payment.");
             return true;
         }
         catch (Exception ex)
         {
+            if (paymentTaken)
+            {
+                try
+                {
+                    money.ChangeCashBalance(PlayPrice, visualizeChange: true, playCashSound: false);
+                    LastStartFailure = "MACHINE COULD NOT START — $10 REFUNDED";
+                }
+                catch (Exception refundEx)
+                {
+                    LastStartFailure = "MACHINE COULD NOT START — CHECK CASH BALANCE";
+                    MelonLogger.Error($"Failed to refund arcade payment: {refundEx}");
+                }
+            }
+            else
+            {
+                LastStartFailure = "MACHINE COULD NOT START — NO CHARGE";
+            }
+
             MelonLogger.Error($"Failed to start cabinet {cabinet.Id}: {ex}");
+            try { game.Stop(); }
+            catch { }
             game.Dispose();
             return false;
         }

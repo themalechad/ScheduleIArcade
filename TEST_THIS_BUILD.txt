@@ -1,9 +1,12 @@
-SCHEDULE I ARCADE M2.64 - EMBEDDED ROOM AND GAMEPLAY POLISH
+SCHEDULE I ARCADE M2.65 - TEST THIS BUILD
 
-See TEST_M2.64.txt for the complete focused test flow.
+1. Enter the arcade through the vanilla Arcade door.
+2. Look at each playable machine and confirm the prompt reads PRESS [E] PLAY - $10 CASH.
+3. With less than $10, confirm play is blocked and no money is removed.
+4. With at least $10, confirm one successful session removes exactly $10 from normal cash.
+5. Test Pac-Man, all four pinballs, both Doom/test cabinets, and Arcade TV controls.
+6. Confirm Escape exits without another charge and failed startup refunds the payment.
+7. Move and place several machines; movement and placement must remain free.
+8. Confirm normal entrance, both exits, lighting, ambience, and furniture placement still work.
 
-Quick check:
-1. Enter the Arcade and confirm the room is inside the native building at (-44.7, -2.9, 136.7).
-2. Launch Space Cadet; confirm the ball clears the barrel and can be re-fired after returning to it.
-3. Walk tightly around every pinball without becoming stuck, and confirm Pac-Man glides smoothly.
-4. Inspect the generated entrance from inside and confirm no light gap remains between the doors.
+See TEST_M2.65.txt for the full paid-play regression pass.

@@ -1,6 +1,11 @@
-IMPORTANT BEFORE A NEXUS RELEASE
+ASSET PROVENANCE STATUS
 
-The FBX and textures in this working project came from the model archive supplied by the user.
-Before redistributing them publicly, verify the original model/scene license explicitly permits redistribution inside a game mod.
+On 2026-08-21, the project owner confirmed that all custom assets and artwork bundled with this
+project were either AI-generated for the project or obtained from royalty-free sources.
 
-Do not publish these source assets to Nexus until that license is confirmed.
+Keep the original source/license records for any royalty-free assets when preparing mirrors,
+release archives, or storefront uploads. Royalty-free does not necessarily remove attribution,
+field-of-use, trademark, or no-resale-of-the-standalone-asset conditions.
+
+Optional Doom TV mods, Doom WADs, and original Windows Space Cadet data are not bundled here.
+Third-party game names and trademarks remain the property of their respective owners.
