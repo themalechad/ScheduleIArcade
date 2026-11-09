@@ -25,10 +25,8 @@ internal sealed class ArcadeLocationService : IDisposable
     public GameObject? RoomInstance { get; private set; }
     public Transform? SpawnMarker { get; private set; }
     public Transform? ExitMarker { get; private set; }
-    public Transform? BackExitMarker { get; private set; }
     public bool UsingProceduralFallback { get; private set; }
     public bool UsingRawScene { get; private set; }
-    private bool _entryAnchorPrepared;
 
     public bool Spawn()
     {
@@ -45,11 +43,9 @@ internal sealed class ArcadeLocationService : IDisposable
             RoomInstance.name = "ScheduleIArcade_Runtime";
             UsingProceduralFallback = false;
             UsingRawScene = false;
-            _entryAnchorPrepared = false;
 
             SpawnMarker = FindDeepChild(RoomInstance.transform, Constants.SpawnMarkerName);
             ExitMarker = FindDeepChild(RoomInstance.transform, Constants.ExitMarkerName);
-            BackExitMarker = FindDeepChild(RoomInstance.transform, Constants.BackExitMarkerName);
 
             if (SpawnMarker == null || ExitMarker == null)
             {
@@ -76,11 +72,9 @@ internal sealed class ArcadeLocationService : IDisposable
                     RoomInstance = root;
                     SpawnMarker = rawSpawn;
                     ExitMarker = rawExit;
-                    BackExitMarker = FindDeepChild(root.transform, Constants.BackExitMarkerName);
                     UsingRawScene = true;
                     UsingProceduralFallback = false;
-                    _entryAnchorPrepared = false;
-                    MelonLogger.Msg("Arcade room spawned from the supplied FBX runtime geometry/textures.");
+                            MelonLogger.Msg("Arcade room spawned from the supplied FBX runtime geometry/textures.");
                     return true;
                 }
 
@@ -105,7 +99,6 @@ internal sealed class ArcadeLocationService : IDisposable
             RoomInstance = root;
             UsingProceduralFallback = true;
             UsingRawScene = false;
-            _entryAnchorPrepared = false;
 
             // Thick floor plus a second catch floor. This avoids controller tunnelling during
             // teleport and gives the player a safety net if Unity resolves the first frame oddly.
@@ -134,7 +127,7 @@ internal sealed class ArcadeLocationService : IDisposable
             CreateTestCabinet(root.transform, "01", new Vector3(-4.3f, 1.15f, 4.6f), Quaternion.Euler(0f, 180f, 0f));
             CreateTestCabinet(root.transform, "02", new Vector3(4.3f, 1.15f, 4.6f), Quaternion.Euler(0f, 180f, 0f));
 
-            MelonLogger.Warning("Arcade AssetBundle is not available. Spawned procedural TEST arcade so door/teleport/collision/cabinet gameplay can be tested now.");
+            MelonLogger.Warning("Arcade AssetBundle and raw room package are not available. Spawned the procedural TEST room at the configured RoomX/Y/Z; it is NOT connected to the Arcade building's door (the walk-in entrance needs the packaged raw room).");
             return true;
         }
         catch (Exception ex)
@@ -194,52 +187,37 @@ internal sealed class ArcadeLocationService : IDisposable
     }
 
     /// <summary>
-    /// Keeps the real textured room embedded in the native Arcade building. Only the emergency
-    /// procedural fallback is moved to an isolated same-elevation pocket.
+    /// True when a world position is inside the arcade room itself (not the entrance vestibule).
+    /// This replaces the old teleport flag: being "in the arcade" is now purely spatial.
     /// </summary>
-    public bool PrepareForEntry(Vector3 exteriorAnchor)
+    public bool IsPointInsideRoom(Vector3 worldPosition)
     {
-        if (RoomInstance == null || SpawnMarker == null)
+        if (RoomInstance == null)
             return false;
 
-        if ((!UsingProceduralFallback && !UsingRawScene) || _entryAnchorPrepared)
-            return true;
-
+        Vector3 local = RoomInstance.transform.InverseTransformPoint(worldPosition);
         if (UsingRawScene)
-        {
-            RoomInstance.transform.rotation = Quaternion.Euler(0f, NativeArcadeInteriorYaw, 0f);
-            RoomInstance.transform.position = NativeArcadeInteriorPosition;
-        }
-        else
-        {
-            // A 1000 m horizontal offset isolates the fallback without the old 300 m sky spawn.
-            RoomInstance.transform.position = new Vector3(
-                exteriorAnchor.x + 1000f,
-                exteriorAnchor.y,
-                exteriorAnchor.z + 1000f);
-        }
+            return RawArcadeSceneService.IsInsideInteriorLocal(local);
 
-        // The room and all primitive colliders moved this frame. Force Unity's physics world to
-        // see the new transforms before ArcadeEntranceService teleports the player onto the floor.
-        Physics.SyncTransforms();
-
-        _entryAnchorPrepared = true;
-        string source = UsingRawScene ? "real textured arcade embedded in native building" : "procedural arcade";
-        if (UsingRawScene)
-            MelonLogger.Msg($"{source} anchored at {RoomInstance.transform.position} and aligned to {NativeArcadeInteriorYaw:0} degrees.");
-        else
-            MelonLogger.Msg($"{source} anchored at safe same-elevation pocket position {RoomInstance.transform.position}.");
-        return true;
+        // Procedural/AssetBundle fallback rooms: axis-aligned footprint of their geometry.
+        Bounds bounds = new(Vector3.zero, Vector3.zero);
+        bool any = false;
+        foreach (Renderer renderer in RoomInstance.GetComponentsInChildren<Renderer>())
+        {
+            if (renderer == null)
+                continue;
+            if (!any) { bounds = renderer.bounds; any = true; }
+            else bounds.Encapsulate(renderer.bounds);
+        }
+        return any && bounds.Contains(worldPosition);
     }
 
     public void Dispose()
     {
         SpawnMarker = null;
         ExitMarker = null;
-        BackExitMarker = null;
         UsingProceduralFallback = false;
         UsingRawScene = false;
-        _entryAnchorPrepared = false;
         _rawScene.Dispose();
         if (RoomInstance != null)
         {

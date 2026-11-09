@@ -51,6 +51,7 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
 
     private MovableAsset? _activeAsset;
     private MovableAsset? _lookedAtAsset;
+    public bool IsHoldingAsset => _activeAsset != null;
     private GameObject? _ghost;
     private Material? _validGhostMaterial;
     private Material? _invalidGhostMaterial;

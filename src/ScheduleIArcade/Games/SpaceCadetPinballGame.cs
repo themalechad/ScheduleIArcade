@@ -1,66 +1,25 @@
+using ScheduleIArcade.Games.Pinball;
 using UnityEngine;
 
 namespace ScheduleIArcade.Games;
 
 /// <summary>
-/// A self-contained arcade adaptation of the open SpaceCadetPinball project's table-driven
-/// pinball concepts. It deliberately uses original graphics and an original table layout because
-/// the upstream project does not distribute the original Windows game resource files.
+/// Space Cadet style table rendered into a texture. Physics lives in <see cref="PinballSimulation"/>
+/// (fixed 1/480 s steps, capsule colliders, rotating flippers) and the table is drawn from the
+/// same collider data, so every rail, target and wall the player sees is exactly what the ball
+/// hits. Original graphics; no assets from the Windows game are used.
 /// </summary>
 internal sealed class SpaceCadetPinballGame : IArcadeGame
 {
-    private const int Width = 320;
-    private const int Height = 480;
-    private const float Left = 22f;
-    private const float Right = 298f;
-    private const float Bottom = 26f;
-    private const float Top = 452f;
-    private const float BallRadius = 5.5f;
-    // A short centre guard rejects a cheap straight-line drain without sealing the normal side
-    // drains. It is deliberately below the flippers, so player timing still matters.
-    private const float DrainGuardLeft = 123f;
-    private const float DrainGuardRight = 197f;
-    private const float DrainGuardY = 31f;
-    private const float MaxStopperSpeed = 380f;
-    // The right side is a real plunger barrel: a launch remains inside it until it clears
-    // the lower sling/target cluster, then a gate feeds it cleanly into the playfield.
-    private const float LaunchBarrelLeft = 271f;
-    private const float LaunchBarrelRight = Right;
-    private const float LaunchBarrelBottom = 38f;
-    private const float LaunchBarrelExitY = 394f;
-    private const float LaunchBallRestY = 58f;
+    private const int Width = (int)PinballSimulation.Width;
+    private const int Height = (int)PinballSimulation.Height;
 
-    private static readonly Vector2[] Bumpers =
-    {
-        new(116f, 323f),
-        new(203f, 334f),
-        new(163f, 255f)
-    };
-
-    private static readonly Vector2[] Targets =
-    {
-        new(78f, 365f), new(78f, 316f), new(78f, 267f),
-        new(242f, 365f), new(242f, 316f), new(242f, 267f)
-    };
-
+    private readonly PinballSimulation _sim = new();
     private Texture2D? _texture;
     private Color32[]? _pixels;
-    private Vector2 _ball;
-    private Vector2 _velocity;
-    private float _leftFlipperAngle;
-    private float _rightFlipperAngle;
     private float _nextDraw;
-    private float _flipperCooldown;
-    private float _ballSaver;
-    private readonly float[] _bumperCooldowns = new float[Bumpers.Length];
-    private readonly float[] _targetCooldowns = new float[Targets.Length];
-    private int _score;
-    private int _balls;
-    private int _multiplier;
-    private int _targetsLit;
-    private bool _waitingToLaunch;
-    private bool _insideLaunchBarrel;
-    private bool _gameOver;
+    private float _bannerTime;
+    private string _banner = string.Empty;
 
     public string Id => "space_cadet_pinball";
     public string DisplayName => "Space Cadet Pinball";
@@ -78,14 +37,14 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
             wrapMode = TextureWrapMode.Clamp
         };
         _pixels = new Color32[Width * Height];
-        ResetGame();
+        _sim.ResetGame();
         DrawFrame();
     }
 
     public void Start()
     {
-        if (_gameOver)
-            ResetGame();
+        if (_sim.GameOver)
+            _sim.ResetGame();
     }
 
     public void Tick(float deltaTime)
@@ -93,36 +52,39 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         if (_texture == null || _pixels == null)
             return;
 
-        if (_gameOver)
+        if (_sim.GameOver)
         {
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return))
-                ResetGame();
-            DrawFrame();
-            return;
-        }
-
-        bool leftPressed = Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.Z);
-        bool rightPressed = Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.Slash) || Input.GetKey(KeyCode.X);
-        _leftFlipperAngle = Mathf.MoveTowards(_leftFlipperAngle, leftPressed ? 67f : 22f, deltaTime * 540f);
-        _rightFlipperAngle = Mathf.MoveTowards(_rightFlipperAngle, rightPressed ? 113f : 158f, deltaTime * 540f);
-
-        if (_waitingToLaunch)
-        {
-            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.UpArrow))
-                LaunchBall();
+                _sim.ResetGame();
         }
         else
         {
-            int steps = Mathf.Clamp(Mathf.CeilToInt(deltaTime * 180f), 1, 10);
-            float step = Mathf.Min(deltaTime, 0.05f) / steps;
-            for (int i = 0; i < steps && !_waitingToLaunch; i++)
-                Simulate(step, leftPressed, rightPressed);
+            bool leftPressed = Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.Z);
+            bool rightPressed = Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.Slash) || Input.GetKey(KeyCode.X);
+            bool launch = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.UpArrow);
+            // Real (unscaled) frame time; the simulation consumes it in fixed sub-steps so the
+            // table behaves identically at any frame rate.
+            float frame = Time.unscaledDeltaTime > 0f ? Time.unscaledDeltaTime : deltaTime;
+            _sim.Advance(frame, leftPressed, rightPressed, launch);
         }
 
+        foreach (PinballEvent e in _sim.DrainEvents())
+        {
+            if (e.Kind == PinballEventKind.BallSaved)
+                ShowBanner("BALL SAVED");
+            else if (e.Kind == PinballEventKind.Orbit)
+                ShowBanner("ORBIT 1000");
+            else if (e.Kind == PinballEventKind.TargetBankComplete)
+                ShowBanner("MULTIPLIER X" + _sim.Multiplier);
+            else if (e.Kind == PinballEventKind.Drain && !_sim.GameOver && _sim.BallSaver <= 0f)
+                ShowBanner("BALL LOST");
+        }
+
+        _bannerTime = Mathf.Max(0f, _bannerTime - deltaTime);
         _nextDraw -= deltaTime;
         if (_nextDraw <= 0f)
         {
-            _nextDraw = 1f / 45f;
+            _nextDraw = 1f / 60f;
             DrawFrame();
         }
     }
@@ -139,312 +101,13 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         _pixels = null;
     }
 
-    private void ResetGame()
+    private void ShowBanner(string text)
     {
-        _score = 0;
-        _balls = 3;
-        _multiplier = 1;
-        _targetsLit = 0;
-        _gameOver = false;
-        _leftFlipperAngle = 22f;
-        _rightFlipperAngle = 158f;
-        Array.Clear(_bumperCooldowns, 0, _bumperCooldowns.Length);
-        Array.Clear(_targetCooldowns, 0, _targetCooldowns.Length);
-        PrepareBall();
+        _banner = text;
+        _bannerTime = 1.4f;
     }
 
-    private void PrepareBall()
-    {
-        _waitingToLaunch = true;
-        _insideLaunchBarrel = true;
-        _ball = new Vector2((LaunchBarrelLeft + LaunchBarrelRight) * 0.5f, LaunchBallRestY);
-        _velocity = Vector2.zero;
-        _ballSaver = 2.5f;
-    }
-
-    private void LaunchBall()
-    {
-        _waitingToLaunch = false;
-        // This is deliberately stronger than a normal field shot so gravity cannot stall the
-        // ball inside the tall barrel. The gate below converts it back to a calm field speed.
-        _velocity = new Vector2(0f, 560f);
-        AddScore(250);
-    }
-
-    private void Simulate(float dt, bool leftPressed, bool rightPressed)
-    {
-        _flipperCooldown = Mathf.Max(0f, _flipperCooldown - dt);
-        _ballSaver = Mathf.Max(0f, _ballSaver - dt);
-        for (int i = 0; i < _bumperCooldowns.Length; i++)
-            _bumperCooldowns[i] = Mathf.Max(0f, _bumperCooldowns[i] - dt);
-        for (int i = 0; i < _targetCooldowns.Length; i++)
-            _targetCooldowns[i] = Mathf.Max(0f, _targetCooldowns[i] - dt);
-
-        _velocity += new Vector2(0f, -260f) * dt;
-        _velocity *= Mathf.Pow(0.996f, dt * 60f);
-        _ball += _velocity * dt;
-
-        ResolveWalls();
-        TryEnterLaunchBarrel();
-        ResolveLaunchBarrel();
-
-        // Nothing in the playfield may hit the ball while it is still travelling up the
-        // launcher. This prevents the old immediate target/sling collision on launch.
-        if (_insideLaunchBarrel)
-            return;
-
-        ResolveBumpers();
-        ResolveTargets();
-        ResolveSlings();
-        ResolveFlipper(new Vector2(96f, 74f), 54f, _leftFlipperAngle, leftPressed, true);
-        ResolveFlipper(new Vector2(224f, 74f), 54f, _rightFlipperAngle, rightPressed, false);
-        ResolveDrainGuard();
-
-        if (_ball.y < 10f)
-        {
-            if (_ballSaver > 0f)
-            {
-                _ball = new Vector2(160f, 130f);
-                _velocity = new Vector2(24f, 410f);
-                AddScore(500);
-            }
-            else
-                DrainBall();
-        }
-    }
-
-    private void ResolveWalls()
-    {
-        if (_ball.x < Left + BallRadius)
-        {
-            _ball.x = Left + BallRadius;
-            _velocity.x = Mathf.Abs(_velocity.x) * 0.88f;
-        }
-        else if (_ball.x > Right - BallRadius)
-        {
-            _ball.x = Right - BallRadius;
-            _velocity.x = -Mathf.Abs(_velocity.x) * 0.88f;
-        }
-
-        if (_ball.y > Top - BallRadius)
-        {
-            _ball.y = Top - BallRadius;
-            _velocity.y = -Mathf.Abs(_velocity.y) * 0.88f;
-            AddScore(100);
-        }
-
-    }
-
-    private void ResolveLaunchBarrel()
-    {
-        if (!_insideLaunchBarrel)
-            return;
-
-        float leftWall = LaunchBarrelLeft + BallRadius;
-        float rightWall = LaunchBarrelRight - BallRadius;
-        if (_ball.x < leftWall)
-        {
-            _ball.x = leftWall;
-            _velocity.x = Mathf.Abs(_velocity.x) * 0.45f;
-        }
-        else if (_ball.x > rightWall)
-        {
-            _ball.x = rightWall;
-            _velocity.x = -Mathf.Abs(_velocity.x) * 0.45f;
-        }
-
-        // A returning ball can fall back into the plunger barrel. Catch it on the spring and
-        // restore the normal Space/Up launch state instead of draining or bouncing forever.
-        if (!_waitingToLaunch && _velocity.y <= 0f && _ball.y <= LaunchBallRestY)
-        {
-            _waitingToLaunch = true;
-            _ball = new Vector2((LaunchBarrelLeft + LaunchBarrelRight) * 0.5f, LaunchBallRestY);
-            _velocity = Vector2.zero;
-            _ballSaver = 2.5f;
-            AddScore(100);
-            return;
-        }
-
-        if (_ball.y < LaunchBarrelBottom + BallRadius)
-        {
-            _ball.y = LaunchBarrelBottom + BallRadius;
-            _velocity.y = Mathf.Abs(_velocity.y) * 0.5f;
-        }
-
-        if (_ball.y < LaunchBarrelExitY || _velocity.y <= 0f)
-            return;
-
-        // The open gate is deliberately above all right-side targets. The ball enters with a
-        // gentle leftward kick, then gravity carries it naturally back through the table.
-        _insideLaunchBarrel = false;
-        _ball = new Vector2(LaunchBarrelLeft - BallRadius - 3f, LaunchBarrelExitY + 5f);
-        _velocity = new Vector2(-170f, Mathf.Clamp(_velocity.y * 0.82f, 260f, 350f));
-        AddScore(500);
-    }
-
-    private void TryEnterLaunchBarrel()
-    {
-        if (_insideLaunchBarrel || _waitingToLaunch || _velocity.y >= 0f)
-            return;
-
-        float leftWall = LaunchBarrelLeft + BallRadius;
-        float rightWall = LaunchBarrelRight - BallRadius;
-        if (_ball.x < leftWall || _ball.x > rightWall || _ball.y > LaunchBarrelExitY + 14f)
-            return;
-
-        _insideLaunchBarrel = true;
-        _ball.x = Mathf.Clamp(_ball.x, leftWall, rightWall);
-    }
-
-    private void ResolveBumpers()
-    {
-        for (int i = 0; i < Bumpers.Length; i++)
-        {
-            Vector2 offset = _ball - Bumpers[i];
-            float distance = offset.magnitude;
-            const float radius = 22f;
-            if (distance >= radius + BallRadius)
-                continue;
-
-            Vector2 normal = distance > 0.001f ? offset / distance : Vector2.up;
-            _ball = Bumpers[i] + normal * (radius + BallRadius);
-            _velocity = Vector2.Reflect(_velocity, normal) + normal * 58f;
-            LimitStopperSpeed();
-            if (_bumperCooldowns[i] <= 0f)
-            {
-                _bumperCooldowns[i] = 0.12f;
-                AddScore(500);
-            }
-        }
-    }
-
-    private void ResolveTargets()
-    {
-        for (int i = 0; i < Targets.Length; i++)
-        {
-            Vector2 offset = _ball - Targets[i];
-            float distance = offset.magnitude;
-            const float radius = 10f;
-            if (distance >= radius + BallRadius)
-                continue;
-
-            Vector2 normal = distance > 0.001f ? offset / distance : Vector2.right;
-            _ball = Targets[i] + normal * (radius + BallRadius);
-            _velocity = Vector2.Reflect(_velocity, normal) + normal * 34f;
-            LimitStopperSpeed();
-            if (_targetCooldowns[i] <= 0f)
-            {
-                _targetCooldowns[i] = 0.28f;
-                _targetsLit |= 1 << i;
-                AddScore(250);
-                if (_targetsLit == 0x3F)
-                {
-                    _targetsLit = 0;
-                    _multiplier = Mathf.Min(8, _multiplier + 1);
-                    AddScore(2500);
-                }
-            }
-        }
-    }
-
-    private void ResolveSlings()
-    {
-        ResolveCircle(new Vector2(82f, 138f), 20f, 52f, 120);
-        ResolveCircle(new Vector2(238f, 138f), 20f, 52f, 120);
-
-        if (_ball.y > 397f && _ball.x > 84f && _ball.x < 236f)
-        {
-            _velocity.y = -Mathf.Abs(_velocity.y);
-            AddScore(75);
-        }
-    }
-
-    private void ResolveCircle(Vector2 center, float radius, float kick, int score)
-    {
-        Vector2 offset = _ball - center;
-        float distance = offset.magnitude;
-        if (distance >= radius + BallRadius)
-            return;
-
-        Vector2 normal = distance > 0.001f ? offset / distance : Vector2.up;
-        _ball = center + normal * (radius + BallRadius);
-        _velocity = Vector2.Reflect(_velocity, normal) + normal * kick;
-        LimitStopperSpeed();
-        AddScore(score);
-    }
-
-    private void ResolveFlipper(Vector2 pivot, float length, float degrees, bool pressed, bool left)
-    {
-        float radians = degrees * Mathf.Deg2Rad;
-        Vector2 tip = pivot + new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * length;
-        Vector2 closest = ClosestPoint(_ball, pivot, tip);
-        Vector2 offset = _ball - closest;
-        float distance = offset.magnitude;
-        const float thickness = 8f;
-        if (distance >= BallRadius + thickness)
-            return;
-
-        Vector2 normal = distance > 0.001f
-            ? offset / distance
-            : new Vector2(-Mathf.Sin(radians), Mathf.Cos(radians));
-        _ball = closest + normal * (BallRadius + thickness);
-        _velocity = Vector2.Reflect(_velocity, normal);
-        float lift = pressed ? 455f : 90f;
-        _velocity += normal * 95f + new Vector2(left ? -32f : 32f, lift);
-        _velocity = Vector2.ClampMagnitude(_velocity, 640f);
-        if (_flipperCooldown <= 0f)
-        {
-            _flipperCooldown = 0.06f;
-            AddScore(10);
-        }
-    }
-
-    private void ResolveDrainGuard()
-    {
-        if (_velocity.y >= 0f ||
-            _ball.x < DrainGuardLeft - BallRadius ||
-            _ball.x > DrainGuardRight + BallRadius ||
-            _ball.y > DrainGuardY + BallRadius)
-        {
-            return;
-        }
-
-        _ball.y = DrainGuardY + BallRadius;
-        _velocity.y = Mathf.Max(82f, Mathf.Abs(_velocity.y) * 0.76f);
-        _velocity.x *= 0.92f;
-        LimitStopperSpeed();
-        AddScore(25);
-    }
-
-    private void LimitStopperSpeed()
-    {
-        // Stopper hits should return the ball smoothly, never accumulate unlimited kick energy.
-        _velocity = Vector2.ClampMagnitude(_velocity, MaxStopperSpeed);
-    }
-
-    private void DrainBall()
-    {
-        _balls--;
-        if (_balls <= 0)
-        {
-            _gameOver = true;
-            _waitingToLaunch = false;
-            return;
-        }
-        PrepareBall();
-    }
-
-    private void AddScore(int value) => _score += value * _multiplier;
-
-    private static Vector2 ClosestPoint(Vector2 point, Vector2 start, Vector2 end)
-    {
-        Vector2 segment = end - start;
-        float lengthSquared = segment.sqrMagnitude;
-        if (lengthSquared < 0.0001f)
-            return start;
-        float t = Mathf.Clamp01(Vector2.Dot(point - start, segment) / lengthSquared);
-        return start + segment * t;
-    }
+    private static Vector2 V(Vec2 v) => new(v.X, v.Y);
 
     private void DrawFrame()
     {
@@ -453,157 +116,142 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
         Fill(0, 0, Width, Height, new Color32(1, 4, 16, 255));
         Fill(13, 12, Width - 26, Height - 24, new Color32(6, 16, 49, 255));
-        DrawRoundedBoard();
-        DrawHud();
-        DrawTableArt();
+        Fill(PinballSimulation.Left, PinballSimulation.Bottom, PinballSimulation.Right - PinballSimulation.Left, PinballSimulation.Top - PinballSimulation.Bottom, new Color32(12, 28, 82, 255));
+        Fill(PinballSimulation.LaneLeft, PinballSimulation.Bottom, PinballSimulation.Right - PinballSimulation.LaneLeft, PinballSimulation.LaneGateY - PinballSimulation.Bottom, new Color32(7, 30, 68, 255));
+        // The drain hole between the aprons is the only way out of the playfield.
+        Fill(PinballSimulation.ApronBottomLeftX, 0f, PinballSimulation.ApronBottomRightX - PinballSimulation.ApronBottomLeftX, PinballSimulation.Bottom, new Color32(2, 3, 10, 255));
+
+        DrawScenery();
+        DrawColliders();
         DrawBall();
+        DrawHud();
 
         _texture.SetPixels32(_pixels);
         _texture.Apply(false, false);
     }
 
-    private void DrawRoundedBoard()
+    private void DrawScenery()
     {
-        Fill(Left, Bottom, Right - Left, Top - Bottom, new Color32(12, 28, 82, 255));
-        Frame((int)Left, (int)Bottom, (int)(Right - Left), (int)(Top - Bottom), 4, new Color32(40, 226, 255, 255));
-        Line(new Vector2(Left + 8f, 155f), new Vector2(78f, 416f), 2, new Color32(100, 63, 255, 255));
-        Line(new Vector2(Right - 8f, 155f), new Vector2(242f, 416f), 2, new Color32(100, 63, 255, 255));
-        Line(new Vector2(78f, 416f), new Vector2(242f, 416f), 2, new Color32(100, 63, 255, 255));
-        Fill(LaunchBarrelLeft, LaunchBarrelBottom, LaunchBarrelRight - LaunchBarrelLeft, LaunchBarrelExitY - LaunchBarrelBottom + 3f, new Color32(7, 30, 68, 255));
-        Frame((int)LaunchBarrelLeft, (int)LaunchBarrelBottom, (int)(LaunchBarrelRight - LaunchBarrelLeft), (int)(LaunchBarrelExitY - LaunchBarrelBottom + 3f), 2, new Color32(54, 177, 255, 255));
+        // Background-only decoration: single-pixel stars and small lamp dots that are clearly
+        // not obstacles. Everything solid is drawn from collider data in DrawColliders.
+        for (int i = 0; i < 58; i++)
+        {
+            int x = 34 + (i * 47 % 226);
+            int y = 118 + (i * 71 % 280);
+            Color32 colour = i % 3 == 0 ? new Color32(70, 72, 190, 255) : new Color32(80, 160, 200, 255);
+            Fill(x, y, 1, 1, colour);
+        }
+        for (int i = 0; i < 6; i++)
+        {
+            int y = 200 + i * 30;
+            Fill(30, y, 2, 2, i % 2 == 0 ? new Color32(255, 93, 175, 255) : new Color32(86, 231, 255, 255));
+            Fill(262, y, 2, 2, i % 2 == 0 ? new Color32(86, 231, 255, 255) : new Color32(255, 93, 175, 255));
+        }
+        DrawTextCentered("STAR GATE", 436, 1, new Color32(255, 226, 96, 255));
+        DrawText("FIRE", (int)PinballSimulation.LaneLeft + 3, 30, 1, new Color32(230, 246, 255, 255));
+    }
+
+    private void DrawColliders()
+    {
+        foreach (PinballSegment segment in _sim.Segments)
+        {
+            int thickness = Mathf.Max(2, Mathf.RoundToInt(segment.Radius * 2f));
+            Vector2 a = V(segment.A);
+            Vector2 b = V(segment.B);
+            switch (segment.Kind)
+            {
+                case PinballSegmentKind.Target:
+                    bool lit = (_sim.TargetsLit & (1 << segment.TargetIndex)) != 0 || _sim.TargetFlash(segment.TargetIndex) > 0f;
+                    Line(a, b, thickness + 2, new Color32(230, 244, 255, 255));
+                    Line(a, b, thickness, lit ? new Color32(255, 232, 92, 255) : new Color32(69, 115, 213, 255));
+                    break;
+                case PinballSegmentKind.OneWayGate:
+                    Line(a, b, 3, new Color32(255, 222, 97, 255));
+                    break;
+                case PinballSegmentKind.Guide:
+                    Line(a, b, thickness + 2, new Color32(30, 18, 70, 255));
+                    Line(a, b, thickness, new Color32(130, 90, 255, 255));
+                    break;
+                case PinballSegmentKind.Rail:
+                    Line(a, b, thickness + 2, new Color32(22, 69, 137, 255));
+                    Line(a, b, thickness, new Color32(80, 235, 255, 255));
+                    break;
+                default:
+                    Line(a, b, thickness + 1, new Color32(40, 226, 255, 255));
+                    break;
+            }
+        }
+
+        for (int i = 0; i < _sim.Circles.Count; i++)
+        {
+            PinballCircle circle = _sim.Circles[i];
+            Vector2 center = V(circle.Center);
+            int radius = Mathf.RoundToInt(circle.Radius);
+            bool flash = _sim.CircleFlash(i) > 0f;
+            switch (circle.Kind)
+            {
+                case PinballCircleKind.Bumper:
+                    Circle(center, radius, new Color32(28, 15, 62, 255));
+                    Ring(center, radius, 3, flash ? new Color32(255, 235, 121, 255) : new Color32(254, 75, 146, 255));
+                    Circle(center, radius / 2, new Color32(37, 194, 255, 255));
+                    Circle(center, 4, new Color32(239, 249, 255, 255));
+                    break;
+                case PinballCircleKind.Sling:
+                    Circle(center, radius, flash ? new Color32(255, 214, 96, 255) : new Color32(210, 53, 111, 255));
+                    Ring(center, radius, 2, new Color32(255, 214, 96, 255));
+                    break;
+                default:
+                    Circle(center, radius, new Color32(20, 45, 111, 255));
+                    Ring(center, radius, 2, new Color32(82, 221, 255, 255));
+                    break;
+            }
+        }
+
+        DrawFlipper(_sim.LeftFlipper);
+        DrawFlipper(_sim.RightFlipper);
+    }
+
+    private void DrawFlipper(PinballFlipper flipper)
+    {
+        int width = Mathf.RoundToInt(flipper.Radius * 2f);
+        Vector2 pivot = V(flipper.Pivot);
+        Vector2 tip = V(flipper.Tip);
+        Line(pivot, tip, width + 3, new Color32(38, 17, 39, 255));
+        Line(pivot, tip, width, new Color32(255, 105, 76, 255));
+        Line(pivot, tip, 2, new Color32(255, 230, 170, 255));
+        Circle(pivot, Mathf.RoundToInt(flipper.Radius), new Color32(234, 238, 248, 255));
+    }
+
+    private void DrawBall()
+    {
+        if (_sim.GameOver)
+            return;
+        Vector2 ball = V(_sim.Ball);
+        Circle(ball + new Vector2(2f, -2f), 6, new Color32(1, 2, 8, 180));
+        Circle(ball, 6, new Color32(224, 246, 255, 255));
+        Circle(ball + new Vector2(-2f, 2f), 2, new Color32(255, 255, 255, 255));
     }
 
     private void DrawHud()
     {
         DrawTextCentered("SPACE CADET", 464, 2, new Color32(123, 238, 255, 255));
-        DrawText("SCORE " + _score.ToString("0000000"), 28, 438, 1, new Color32(255, 225, 93, 255));
-        DrawText("BALL " + _balls, 218, 438, 1, new Color32(205, 228, 255, 255));
-        DrawText("X" + _multiplier, 28, 13, 1, new Color32(255, 150, 67, 255));
+        DrawText("SCORE " + _sim.Score.ToString("0000000"), 28, 442, 1, new Color32(255, 225, 93, 255));
+        DrawText("BALL " + Mathf.Max(0, _sim.Balls), 218, 442, 1, new Color32(205, 228, 255, 255));
+        DrawText("X" + _sim.Multiplier, 28, 13, 1, new Color32(255, 150, 67, 255));
+        if (_sim.BallSaver > 0f && !_sim.WaitingToLaunch)
+            DrawText("SAVE", 250, 13, 1, new Color32(120, 255, 160, 255));
 
-        if (_waitingToLaunch)
+        if (_sim.WaitingToLaunch)
             DrawTextCentered("SPACE LAUNCH", 220, 1, new Color32(255, 230, 105, 255));
-        if (_gameOver)
+        if (_bannerTime > 0f && !_sim.GameOver)
+            DrawTextCentered(_banner, 236, 1, new Color32(255, 255, 255, 255));
+        if (_sim.GameOver)
         {
             Fill(49, 208, 222, 48, new Color32(2, 3, 14, 245));
             Frame(49, 208, 222, 48, 2, new Color32(255, 87, 124, 255));
             DrawTextCentered("GAME OVER", 236, 2, new Color32(255, 102, 130, 255));
             DrawTextCentered("SPACE RESTART", 216, 1, new Color32(235, 240, 255, 255));
         }
-    }
-
-    private void DrawTableArt()
-    {
-        DrawPlayfieldScenery();
-
-        for (int i = 0; i < Bumpers.Length; i++)
-        {
-            Color32 outer = _bumperCooldowns[i] > 0f
-                ? new Color32(255, 235, 121, 255)
-                : new Color32(254, 75, 146, 255);
-            Circle(Bumpers[i], 23, new Color32(28, 15, 62, 255));
-            Ring(Bumpers[i], 23, 3, outer);
-            Circle(Bumpers[i], 12, new Color32(37, 194, 255, 255));
-            Circle(Bumpers[i], 5, new Color32(239, 249, 255, 255));
-        }
-
-        for (int i = 0; i < Targets.Length; i++)
-        {
-            bool lit = (_targetsLit & (1 << i)) != 0;
-            Color32 colour = lit ? new Color32(255, 232, 92, 255) : new Color32(69, 115, 213, 255);
-            Fill((int)Targets[i].x - 6, (int)Targets[i].y - 11, 12, 22, colour);
-            Frame((int)Targets[i].x - 7, (int)Targets[i].y - 12, 14, 24, 2, new Color32(230, 244, 255, 255));
-        }
-
-        Circle(new Vector2(82f, 138f), 20, new Color32(210, 53, 111, 255));
-        Ring(new Vector2(82f, 138f), 20, 3, new Color32(255, 214, 96, 255));
-        Circle(new Vector2(238f, 138f), 20, new Color32(210, 53, 111, 255));
-        Ring(new Vector2(238f, 138f), 20, 3, new Color32(255, 214, 96, 255));
-
-        DrawFlipper(new Vector2(96f, 74f), 54f, _leftFlipperAngle, new Color32(255, 105, 76, 255));
-        DrawFlipper(new Vector2(224f, 74f), 54f, _rightFlipperAngle, new Color32(255, 105, 76, 255));
-        Circle(new Vector2(96f, 74f), 10, new Color32(234, 238, 248, 255));
-        Circle(new Vector2(224f, 74f), 10, new Color32(234, 238, 248, 255));
-
-        // Visible short guard rail at the lower centre. The open left/right lanes still drain,
-        // but a normal central return is deflected back toward the flippers.
-        Line(new Vector2(DrainGuardLeft, DrainGuardY), new Vector2(DrainGuardRight, DrainGuardY), 8, new Color32(20, 34, 76, 255));
-        Line(new Vector2(DrainGuardLeft, DrainGuardY), new Vector2(DrainGuardRight, DrainGuardY), 3, new Color32(92, 220, 255, 255));
-        Circle(new Vector2(DrainGuardLeft, DrainGuardY), 5, new Color32(255, 218, 96, 255));
-        Circle(new Vector2(DrainGuardRight, DrainGuardY), 5, new Color32(255, 218, 96, 255));
-
-        DrawLaunchBarrel();
-    }
-
-    private void DrawPlayfieldScenery()
-    {
-        // A deterministic star field keeps the table richly textured without shimmering from
-        // frame to frame. Gameplay components are drawn after it and stay perfectly readable.
-        for (int i = 0; i < 58; i++)
-        {
-            int x = 34 + (i * 47 % 226);
-            int y = 118 + (i * 71 % 296);
-            int size = i % 11 == 0 ? 3 : i % 4 == 0 ? 2 : 1;
-            Color32 colour = i % 3 == 0
-                ? new Color32(106, 104, 255, 255)
-                : new Color32(122, 227, 255, 255);
-            Fill(x, y, size, size, colour);
-        }
-
-        // Layered orbital guides, a planet, and banks of lamps make the playfield feel like a
-        // proper arcade table rather than a bare collision board.
-        Circle(new Vector2(160f, 397f), 25, new Color32(20, 45, 111, 255));
-        Ring(new Vector2(160f, 397f), 25, 3, new Color32(82, 221, 255, 255));
-        Ring(new Vector2(160f, 397f), 17, 2, new Color32(245, 92, 181, 255));
-        Circle(new Vector2(153f, 405f), 7, new Color32(92, 157, 249, 255));
-        Circle(new Vector2(166f, 390f), 4, new Color32(255, 220, 96, 255));
-        Line(new Vector2(43f, 204f), new Vector2(111f, 231f), 4, new Color32(22, 69, 137, 255));
-        Line(new Vector2(277f, 204f), new Vector2(209f, 231f), 4, new Color32(22, 69, 137, 255));
-        Line(new Vector2(43f, 204f), new Vector2(111f, 231f), 1, new Color32(80, 235, 255, 255));
-        Line(new Vector2(277f, 204f), new Vector2(209f, 231f), 1, new Color32(80, 235, 255, 255));
-
-        for (int i = 0; i < 7; i++)
-        {
-            float y = 172f + i * 32f;
-            Circle(new Vector2(43f, y), 4, i % 2 == 0 ? new Color32(255, 93, 175, 255) : new Color32(86, 231, 255, 255));
-            Circle(new Vector2(277f, y), 4, i % 2 == 0 ? new Color32(86, 231, 255, 255) : new Color32(255, 93, 175, 255));
-        }
-
-        DrawTextCentered("ORBIT", 221, 1, new Color32(163, 224, 255, 255));
-        DrawTextCentered("STAR GATE", 407, 1, new Color32(255, 226, 96, 255));
-    }
-
-    private void DrawLaunchBarrel()
-    {
-        float centerX = (LaunchBarrelLeft + LaunchBarrelRight) * 0.5f;
-        Line(new Vector2(LaunchBarrelLeft + 4f, LaunchBarrelBottom + 8f), new Vector2(LaunchBarrelLeft + 4f, LaunchBarrelExitY - 5f), 2, new Color32(126, 236, 255, 255));
-        Line(new Vector2(LaunchBarrelRight - 4f, LaunchBarrelBottom + 8f), new Vector2(LaunchBarrelRight - 4f, LaunchBarrelExitY - 5f), 2, new Color32(126, 236, 255, 255));
-
-        for (int i = 0; i < 9; i++)
-        {
-            float y = 73f + i * 34f;
-            Circle(new Vector2(centerX, y), 3, i % 2 == 0 ? new Color32(255, 218, 88, 255) : new Color32(255, 79, 153, 255));
-        }
-
-        // The sloped exit is visualised as a one-way gate feeding left into the active table.
-        Line(new Vector2(LaunchBarrelLeft, LaunchBarrelExitY), new Vector2(LaunchBarrelLeft - 19f, LaunchBarrelExitY + 15f), 4, new Color32(25, 62, 125, 255));
-        Line(new Vector2(LaunchBarrelLeft, LaunchBarrelExitY), new Vector2(LaunchBarrelLeft - 19f, LaunchBarrelExitY + 15f), 2, new Color32(255, 222, 97, 255));
-        DrawText("FIRE", (int)LaunchBarrelLeft + 1, 46, 1, new Color32(230, 246, 255, 255));
-    }
-
-    private void DrawBall()
-    {
-        Circle(_ball + new Vector2(2f, -2f), 7, new Color32(1, 2, 8, 180));
-        Circle(_ball, 6, new Color32(224, 246, 255, 255));
-        Circle(_ball + new Vector2(-2f, 2f), 2, new Color32(255, 255, 255, 255));
-    }
-
-    private void DrawFlipper(Vector2 pivot, float length, float degrees, Color32 colour)
-    {
-        float radians = degrees * Mathf.Deg2Rad;
-        Vector2 tip = pivot + new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * length;
-        Line(pivot, tip, 13, new Color32(38, 17, 39, 255));
-        Line(pivot, tip, 9, colour);
-        Line(pivot, tip, 2, new Color32(255, 230, 170, 255));
     }
 
     private void Fill(float x, float y, float width, float height, Color32 colour)

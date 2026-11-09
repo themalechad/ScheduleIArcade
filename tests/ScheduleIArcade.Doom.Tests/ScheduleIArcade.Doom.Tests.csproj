@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- End-to-end smoke tests for the BUILT embedded Doom engine (Build/Release/Doom/ScheduleIArcade.Doom.dll),
+       driven through reflection exactly like the mod does. No NuGet packages.
+       Run: dotnet run -c Release (project tests/ScheduleIArcade.Doom.Tests), args: engine-dll freedoom-dir png-out-dir -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+</Project>

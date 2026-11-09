@@ -1,6 +1,7 @@
 using MelonLoader;
 using ScheduleIArcade.Configuration;
 using ScheduleIArcade.Core;
+using ScheduleIArcade.Utils;
 using UnityEngine;
 
 namespace ScheduleIArcade.Services;
@@ -28,6 +29,7 @@ internal sealed class ArcadeAmbienceService : IDisposable
     private bool _loadAttempted;
     private bool _disposed;
     private bool _lastShouldPlay;
+    private float _fadeGain;
 
     public ArcadeAmbienceService(
         ArcadeLocationService location,
@@ -54,13 +56,12 @@ internal sealed class ArcadeAmbienceService : IDisposable
         _audioObject.transform.localPosition = Vector3.zero;
 
         _source = _audioObject.AddComponent<AudioSource>();
-        _source.playOnAwake = false;
         _source.loop = true;
         _source.volume = 0f;
-        _source.spatialBlend = 0f;
-        _source.dopplerLevel = 0f;
+        // 3D at the room centre with Linear rolloff: quieter towards the walls and exactly silent
+        // beyond AmbienceMaxDistance, so it never carries out of the building.
+        ArcadeAudio.ConfigureSpatial(_source, ArcadeAudioMath.AmbienceMinDistance, ArcadeAudioMath.AmbienceMaxDistance);
         _source.priority = 128;
-        _source.bypassReverbZones = true;
 
         LoadClipIfNeeded();
     }
@@ -75,23 +76,26 @@ internal sealed class ArcadeAmbienceService : IDisposable
 
         bool shouldPlay = _preferences.AmbienceEnabled && _isInsideArcade() && _clip != null;
 
-        if (shouldPlay)
-        {
-            _source.volume = _preferences.AmbienceVolume;
-            if (!_source.isPlaying)
-                _source.Play();
-        }
-        else
-        {
-            if (_source.isPlaying)
-                _source.Stop();
-            _source.volume = 0f;
-        }
+        // Same volume path as every arcade sound: base x MasterVolume x AmbienceVolume x the
+        // game's own Ambient volume (re-read every frame so slider changes apply immediately).
+        float target = shouldPlay
+            ? ArcadeAudioMath.AmbienceGain(_preferences.MasterVolume, _preferences.AmbienceVolume, ArcadeAudio.GameVolume(Il2CppScheduleOne.Core.Audio.EAudioType.Ambient))
+            : 0f;
+        float fade = _preferences.AmbienceFadeSeconds;
+        _fadeGain = fade <= 0.01f ? (shouldPlay ? 1f : 0f) : Mathf.MoveTowards(_fadeGain, shouldPlay ? 1f : 0f, Time.unscaledDeltaTime / fade);
+        _source.volume = target * _fadeGain;
+
+        if (shouldPlay && !_source.isPlaying)
+            _source.Play();
+        else if (!shouldPlay && _fadeGain <= 0f && _source.isPlaying)
+            _source.Stop();
 
         if (shouldPlay != _lastShouldPlay)
         {
             _lastShouldPlay = shouldPlay;
-            MelonLogger.Msg(shouldPlay ? "Arcade ambience started (looping, no fade)." : "Arcade ambience stopped.");
+            MelonLogger.Msg(shouldPlay
+                ? $"Arcade ambience fading in (volume {target:0.000} = master {_preferences.MasterVolume:0.00} x ambience {_preferences.AmbienceVolume:0.00} x game ambient {ArcadeAudio.GameVolume(Il2CppScheduleOne.Core.Audio.EAudioType.Ambient):0.00}, 3D {ArcadeAudioMath.AmbienceMinDistance:0.#}-{ArcadeAudioMath.AmbienceMaxDistance:0.#} m)."
+                : "Arcade ambience fading out.");
         }
     }
 
@@ -123,14 +127,10 @@ internal sealed class ArcadeAmbienceService : IDisposable
                 _source.clip = _clip;
                 _source.loop = true;
 
-                if (_preferences.AmbienceEnabled && _isInsideArcade())
-                {
-                    _source.volume = _preferences.AmbienceVolume;
-                    _source.Play();
-                }
+                // Tick() starts it with the fade and the full volume path.
             }
 
-            MelonLogger.Msg($"Arcade ambience loaded with direct WAV decoder: '{Path.GetFileName(ModPaths.AmbiencePath)}' (90-second loop, volume={_preferences.AmbienceVolume:0.00}, no fade).");
+            MelonLogger.Msg($"Arcade ambience loaded with direct WAV decoder: '{Path.GetFileName(ModPaths.AmbiencePath)}' (90-second loop, 3D, routed through the arcade volume path).");
         }
         catch (Exception ex)
         {

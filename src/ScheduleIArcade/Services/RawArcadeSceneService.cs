@@ -104,7 +104,6 @@ internal sealed class RawArcadeSceneService : IDisposable
             // the runtime test room is a complete interior instead of looking out into the sky.
             CreateMissingWalls(root.transform);
             CreateStreetFighterDoorInfill(root.transform);
-            CreateStreetFighterBackExitMarker(root.transform);
 
             // Add a visible checkerboard overlay floor that is slightly larger than the source
             // floor and the generated edge strips. This hides any remaining seams and gives the
@@ -709,17 +708,6 @@ internal sealed class RawArcadeSceneService : IDisposable
         CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameSouth", parent, new Vector3(x, center.y, center.z - width * 0.5f), new Vector3(0.045f, height + 0.14f, 0.075f), Quaternion.identity, frame);
     }
 
-    private static void CreateStreetFighterBackExitMarker(Transform parent)
-    {
-        // This is the visible single door on the mural wall after it was moved to the right.
-        // The hotspot stays on the player-facing side of that door and is evaluated only by the
-        // close-range look interaction in ArcadeExitInteractionService.
-        var marker = new GameObject(Constants.BackExitMarkerName);
-        marker.transform.SetParent(parent, false);
-        marker.transform.localPosition = new Vector3(FX(2.52f) - 0.28f, 1.45f, FZ(-2.30f));
-        marker.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
-    }
-
     private void CreateWallSegment(string name, Transform parent, Vector3 localA, Vector3 localB, float height, float thickness, Material? material)
     {
         Vector3 delta = localB - localA;
@@ -1217,7 +1205,9 @@ internal sealed class RawArcadeSceneService : IDisposable
         var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
         floor.name = "RawArcade_SafetyFloor";
         floor.transform.SetParent(parent, false);
-        floor.transform.localPosition = new Vector3(0f, -0.50f, 0f);
+        // Top at -0.05 (5 cm under the visible floor) so the part of this box that extends past the
+        // chamfer into the walk-in vestibule cannot form a lip above the vestibule ramp.
+        floor.transform.localPosition = new Vector3(0f, -0.55f, 0f);
         floor.transform.localScale = new Vector3(FSX(5.80f), 1.00f, FSZ(6.60f));
 
         var renderer = floor.GetComponent<Renderer>();
@@ -1275,19 +1265,26 @@ internal sealed class RawArcadeSceneService : IDisposable
         float southZ = -(panelWidth + centerGap) * 0.5f;
         float northZ = +(panelWidth + centerGap) * 0.5f;
 
+        // Each leaf hangs on a real hinge pivot at its outer edge so ArcadeWalkInService can swing
+        // it open; the player walks through the opening instead of being teleported.
         // For a chamfer wall local Z runs along the wall and local +X points into the arcade.
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A", doorRoot.transform, new Vector3(0f, panelY, southZ), new Vector3(0.09f, height, panelWidth), doorMaterial, true);
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B", doorRoot.transform, new Vector3(0f, panelY, northZ), new Vector3(0.09f, height, panelWidth), doorMaterial, true);
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_CenterSeal", doorRoot.transform, new Vector3(0.058f, panelY, 0f), new Vector3(0.024f, height - 0.03f, 0.038f), frameMaterial, false);
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A_Window", doorRoot.transform, new Vector3(0.052f, 1.47f, southZ), new Vector3(0.018f, 0.72f, panelWidth * 0.62f), glassMaterial, false);
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B_Window", doorRoot.transform, new Vector3(0.052f, 1.47f, northZ), new Vector3(0.018f, 0.72f, panelWidth * 0.62f), glassMaterial, false);
+        Transform hingeA = CreateHinge(Constants.RoomDoorHingeA, doorRoot.transform, new Vector3(0f, 0f, -totalWidth * 0.5f));
+        Transform hingeB = CreateHinge(Constants.RoomDoorHingeB, doorRoot.transform, new Vector3(0f, 0f, totalWidth * 0.5f));
+        Vector3 offsetA = new(0f, 0f, totalWidth * 0.5f);
+        Vector3 offsetB = new(0f, 0f, -totalWidth * 0.5f);
+
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A", hingeA, offsetA + new Vector3(0f, panelY, southZ), new Vector3(0.09f, height, panelWidth), doorMaterial, true);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B", hingeB, offsetB + new Vector3(0f, panelY, northZ), new Vector3(0.09f, height, panelWidth), doorMaterial, true);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_CenterSeal", hingeA, offsetA + new Vector3(0.058f, panelY, 0f), new Vector3(0.024f, height - 0.03f, 0.038f), frameMaterial, false);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A_Window", hingeA, offsetA + new Vector3(0.052f, 1.47f, southZ), new Vector3(0.018f, 0.72f, panelWidth * 0.62f), glassMaterial, false);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B_Window", hingeB, offsetB + new Vector3(0.052f, 1.47f, northZ), new Vector3(0.018f, 0.72f, panelWidth * 0.62f), glassMaterial, false);
 
         // Finished commercial-door details: kick plates, push bars, and a lit marker make the
         // entrance read as intentional architecture instead of two plain blocking cubes.
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A_KickPlate", doorRoot.transform, new Vector3(0.056f, 0.27f, southZ), new Vector3(0.022f, 0.36f, panelWidth * 0.72f), frameMaterial, false);
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B_KickPlate", doorRoot.transform, new Vector3(0.056f, 0.27f, northZ), new Vector3(0.022f, 0.36f, panelWidth * 0.72f), frameMaterial, false);
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A_PushBar", doorRoot.transform, new Vector3(0.080f, 0.95f, southZ), new Vector3(0.055f, 0.070f, panelWidth * 0.58f), frameMaterial, false);
-        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B_PushBar", doorRoot.transform, new Vector3(0.080f, 0.95f, northZ), new Vector3(0.055f, 0.070f, panelWidth * 0.58f), frameMaterial, false);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A_KickPlate", hingeA, offsetA + new Vector3(0.056f, 0.27f, southZ), new Vector3(0.022f, 0.36f, panelWidth * 0.72f), frameMaterial, false);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B_KickPlate", hingeB, offsetB + new Vector3(0.056f, 0.27f, northZ), new Vector3(0.022f, 0.36f, panelWidth * 0.72f), frameMaterial, false);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_A_PushBar", hingeA, offsetA + new Vector3(0.080f, 0.95f, southZ), new Vector3(0.055f, 0.070f, panelWidth * 0.58f), frameMaterial, false);
+        CreateDoorPiece("Arcade_DoubleDoor_Chamfer_B_PushBar", hingeB, offsetB + new Vector3(0.080f, 0.95f, northZ), new Vector3(0.055f, 0.070f, panelWidth * 0.58f), frameMaterial, false);
         CreateDoorPiece("Arcade_DoubleDoor_Chamfer_ExitGlow", doorRoot.transform, new Vector3(0.075f, height + 0.30f, 0f), new Vector3(0.032f, 0.13f, 0.44f), exitGlowMaterial, false);
 
         const float frame = 0.105f;
@@ -1343,6 +1340,32 @@ internal sealed class RawArcadeSceneService : IDisposable
         CreateDoorPiece("Arcade_DoubleDoor_Frame_Left", parent, new Vector3(centerX - totalWidth * 0.5f - frame * 0.5f, panelY, wallZ - 0.005f), new Vector3(frame, height + 0.15f, 0.14f), frameMaterial, false);
         CreateDoorPiece("Arcade_DoubleDoor_Frame_Right", parent, new Vector3(centerX + totalWidth * 0.5f + frame * 0.5f, panelY, wallZ - 0.005f), new Vector3(frame, height + 0.15f, 0.14f), frameMaterial, false);
         CreateDoorPiece("Arcade_DoubleDoor_Frame_Top", parent, new Vector3(centerX, height + 0.075f, wallZ - 0.005f), new Vector3(totalWidth + frame * 2f, 0.15f, 0.14f), frameMaterial, false);
+    }
+
+    private static Transform CreateHinge(string name, Transform parent, Vector3 localPosition)
+    {
+        var hinge = new GameObject(name);
+        hinge.transform.SetParent(parent, false);
+        hinge.transform.localPosition = localPosition;
+        return hinge.transform;
+    }
+
+    /// <summary>
+    /// True when a point given in the room root's local space is inside the five-sided interior
+    /// (the walk-in vestibule outside the chamfer door is excluded).
+    /// </summary>
+    public static bool IsInsideInteriorLocal(Vector3 local)
+    {
+        if (local.y < -0.6f || local.y > 3.0f)
+            return false;
+        if (local.x < FX(-2.67f) || local.x > FX(2.64f) || local.z < FZ(-3.02f) || local.z > FZ(3.06f))
+            return false;
+
+        Vector3 chamferA = new(FX(-2.67f), 0f, FZ(1.56f));
+        Vector3 chamferB = new(FX(-0.84f), 0f, FZ(3.06f));
+        Vector3 tangent = chamferB - chamferA;
+        Vector3 inward = new(tangent.z, 0f, -tangent.x);
+        return Vector3.Dot(local - chamferA, inward) >= 0f;
     }
 
     private static void CreateDoorPiece(string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material, bool keepCollider)
@@ -1494,12 +1517,12 @@ internal sealed class RawArcadeSceneService : IDisposable
             if (renderer != null)
             {
                 DoomCabinetEdition edition = index == 1 ? DoomCabinetEdition.Doom1 : DoomCabinetEdition.Doom2;
-                bool doomReady = DoomCabinetModBridge.IsReady(edition, out _);
+                bool doomReady = EmbeddedDoomBridge.IsReady(edition, out _);
                 renderer.sharedMaterial = CreateAttractScreenMaterial(
                     "ScheduleIArcade_M_CabinetScreen" + suffix,
                     "__arcade_cabinet_standby_" + suffix,
-                    doomReady ? (index == 1 ? "DOOM I" : "DOOM II") : "TEST MODE",
-                    doomReady ? "$10 PLAY" : "$10 TEST",
+                    doomReady ? (index == 1 ? "FREEDOOM 1" : "FREEDOOM 2") : "OUT OF ORDER",
+                    doomReady ? "$10 PLAY" : "NO CHARGE",
                     doomReady
                         ? (index == 1 ? new Color32(255, 79, 28, 255) : new Color32(255, 58, 58, 255))
                         : new Color32(60, 190, 255, 255),

@@ -1,5 +1,6 @@
 using MelonLoader;
 using Il2CppScheduleOne.Money;
+using ScheduleIArcade.Configuration;
 using ScheduleIArcade.Games;
 using ScheduleIArcade.Models;
 using UnityEngine;
@@ -19,7 +20,13 @@ internal sealed class ArcadeSessionService : IDisposable
     private Texture? _originalMainTexture;
     private Texture? _originalEmissionMap;
 
-    public ArcadeSessionService(ArcadeGameRegistry games) => _games = games;
+    private readonly ArcadePreferences _preferences;
+
+    public ArcadeSessionService(ArcadeGameRegistry games, ArcadePreferences preferences)
+    {
+        _games = games;
+        _preferences = preferences;
+    }
 
     public bool IsPlaying => _activeGame != null;
     public ArcadeCabinet? ActiveCabinet => _activeCabinet;
@@ -62,6 +69,20 @@ internal sealed class ArcadeSessionService : IDisposable
         {
             game.Initialize();
             game.Start();
+
+            // Doom cabinets run the bundled engine + Freedoom. If those files are missing the cabinet
+            // can only show its test screen, so never charge.
+            if (game is EmbeddedDoomArcadeGame doom && doom.IsUsingFallback)
+            {
+                LastStartFailure = "DOOM OUT OF ORDER — NO CHARGE";
+                MelonLogger.Warning($"{cabinet.Id}: {doom.DisplayName} refused to start without charging: {doom.FallbackReason}");
+                game.Dispose();
+                return false;
+            }
+
+            if (game is EmbeddedDoomArcadeGame doomCabinet)
+                doomCabinet.AttachAudio(cabinet.ScreenRenderer.transform, _preferences);
+
             money.ChangeCashBalance(-PlayPrice, visualizeChange: true, playCashSound: true);
             paymentTaken = true;
             _screenMaterial = cabinet.ScreenRenderer.material;
@@ -115,6 +136,23 @@ internal sealed class ArcadeSessionService : IDisposable
 
         _tvView.Tick();
         _activeGame.Tick(deltaTime);
+        if (_activeGame is EmbeddedDoomArcadeGame quitDoom && quitDoom.QuitRequested)
+        {
+            MelonLogger.Msg($"{quitDoom.DisplayName}: player quit from the Doom menu.");
+            Stop();
+            return;
+        }
+
+        if (_activeGame is EmbeddedDoomArcadeGame failedDoom && failedDoom.IsUsingFallback)
+        {
+            // The external Doom runtime died mid-session. Refund and end instead of leaving a
+            // paid session on a test pattern.
+            MelonLogger.Warning($"{failedDoom.DisplayName} stopped during play ({failedDoom.FallbackReason}); refunding ${PlayPrice:0.00}.");
+            try { MoneyManager.Instance?.ChangeCashBalance(PlayPrice, visualizeChange: true, playCashSound: false); }
+            catch (Exception ex) { MelonLogger.Error($"Failed to refund Doom session: {ex.Message}"); }
+            Stop();
+            return;
+        }
         if (_screenMaterial != null)
             ApplyTexture(_screenMaterial, _activeGame.ScreenTexture);
 

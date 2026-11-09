@@ -13,18 +13,29 @@
     <Il2CppAssembliesPath Condition="'$(Il2CppAssembliesPath)' == '' and '$(ScheduleIGameDir)' != ''">$(ScheduleIGameDir)\MelonLoader\Il2CppAssemblies</Il2CppAssembliesPath>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!--
+    With ScheduleIGameDir set (see example.local.build.props) the project compiles against the
+    exact binaries the game loads: MelonLoader net6, the installed S1API (S1API.Il2Cpp.MelonLoader,
+    3.2.3 on the reference install) and the generated IL2CPP interop assemblies. The NuGet
+    packages below are only a fallback for machines without a game install; their S1API version
+    (3.1.12) is older than what players run, so release builds must use the local references.
+  -->
+  <ItemGroup Condition="'$(ScheduleIGameDir)' == ''">
     <PackageReference Include="S1API.Forked" Version="3.1.12" />
     <PackageReference Include="LavaGang.MelonLoader" Version="0.7.3" PrivateAssets="all" NoWarn="NU1701" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(ScheduleIGameDir)' != ''">
+    <Reference Include="$(ScheduleIGameDir)\MelonLoader\net6\MelonLoader.dll" Private="false" />
+    <Reference Include="$(ScheduleIGameDir)\MelonLoader\net6\0Harmony.dll" Private="false" />
+    <Reference Include="$(ScheduleIGameDir)\MelonLoader\net6\Il2CppInterop.Runtime.dll" Private="false" />
+    <Reference Include="$(ScheduleIGameDir)\MelonLoader\net6\Il2CppInterop.Common.dll" Private="false" />
+    <Reference Include="$(ScheduleIGameDir)\Mods\S1API.Il2Cpp.MelonLoader.dll" Private="false" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(Il2CppAssembliesPath)' != ''">
-    <Reference Include="UnityEngine"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.CoreModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.AssetBundleModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.AssetBundleModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.UI"><HintPath>$(Il2CppAssembliesPath)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <_ScheduleIInterop Include="$(Il2CppAssembliesPath)\*.dll"
+                       Exclude="$(Il2CppAssembliesPath)\System*.dll;$(Il2CppAssembliesPath)\mscorlib.dll;$(Il2CppAssembliesPath)\netstandard.dll;$(Il2CppAssembliesPath)\Microsoft.*.dll" />
+    <Reference Include="@(_ScheduleIInterop)" Private="false" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-# Recreated by Tools/Build-And-Install.ps1; the distributable runtime assets in dist/ are tracked.
+﻿# Recreated by Tools/Build-And-Install.ps1; the distributable runtime assets in dist/ are tracked.
 Build/
 **/bin/
 **/obj/
@@ -12,3 +12,11 @@ Build/
 *.blend2
 __pycache__/
 *.py[cod]
+
+# Logs and agent scratch (never commit).
+*.log
+ScheduleIArcade-claude-*.log
+
+# Freedoom / Doom IWADs are fetched by Tools/Fetch-Freedoom.ps1; never commit WADs (>25 MB each).
+*.wad
+*.WAD

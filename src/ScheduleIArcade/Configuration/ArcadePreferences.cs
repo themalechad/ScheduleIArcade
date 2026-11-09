@@ -1,4 +1,5 @@
 using MelonLoader;
+using ScheduleIArcade.Utils;
 using UnityEngine;
 
 namespace ScheduleIArcade.Configuration;
@@ -13,6 +14,8 @@ internal sealed class ArcadePreferences
     private readonly MelonPreferences_Entry<bool> _ambienceEnabled;
     private readonly MelonPreferences_Entry<float> _ambienceVolume;
     private readonly MelonPreferences_Entry<float> _ambienceFadeSeconds;
+    private readonly MelonPreferences_Entry<float> _masterVolume;
+    private readonly MelonPreferences_Entry<float> _cabinetVolume;
 
     public ArcadePreferences()
     {
@@ -22,8 +25,10 @@ internal sealed class ArcadePreferences
         _roomY = _category.CreateEntry("RoomY", -2.9f, "Custom arcade Y");
         _roomZ = _category.CreateEntry("RoomZ", 144.0f, "Custom arcade Z");
         _ambienceEnabled = _category.CreateEntry("AmbienceEnabled", true, "Arcade Ambience Enabled");
-        _ambienceVolume = _category.CreateEntry("AmbienceVolume", 0.25f, "Arcade Ambience Volume");
+        _ambienceVolume = _category.CreateEntry("AmbienceVolume", ArcadeAudioMath.DefaultAmbienceVolume, "Arcade Ambience Volume", "Room ambience level (0-1), multiplied by MasterVolume and the game's own Ambient volume.");
         _ambienceFadeSeconds = _category.CreateEntry("AmbienceFadeSeconds", 1.25f, "Arcade Ambience Fade Seconds");
+        _masterVolume = _category.CreateEntry("MasterVolume", ArcadeAudioMath.DefaultMasterVolume, "Arcade Master Volume", "Scales every arcade sound (0-1). Final volume = this x category volume x the game's own master/Ambient/FX sliders.");
+        _cabinetVolume = _category.CreateEntry("CabinetVolume", ArcadeAudioMath.DefaultCabinetVolume, "Arcade Cabinet Volume", "Game audio from cabinets, including Doom sound effects (0-1).");
         _category.SaveToFile(false);
     }
 
@@ -32,4 +37,6 @@ internal sealed class ArcadePreferences
     public bool AmbienceEnabled => _ambienceEnabled.Value;
     public float AmbienceVolume => Mathf.Clamp01(_ambienceVolume.Value);
     public float AmbienceFadeSeconds => Mathf.Max(0f, _ambienceFadeSeconds.Value);
+    public float MasterVolume => Mathf.Clamp01(_masterVolume.Value);
+    public float CabinetVolume => Mathf.Clamp01(_cabinetVolume.Value);
 }

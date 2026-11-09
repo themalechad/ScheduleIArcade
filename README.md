@@ -16,15 +16,23 @@ Current release: **v0.2.65**
 
 ### A complete arcade interior
 
-- Adds a sealed, polished interior inside the real in-game Arcade building.
-- Uses the vanilla Arcade entrance instead of a disconnected debug teleport.
-- Includes a checkerboard floor, finished walls and ceiling, baseboards, trim, sealed corners, and
-  corrected double doors.
-- Keeps the room aligned inside the native building so the custom shell does not cover nearby roads
-  or extend outside the structure.
-- Provides a normal front return and a rear west-side exit.
-- Uses proximity- and vision-based door prompts so exits do not activate while the player is merely
-  standing nearby.
+- A walk-in shop inside the real Northtown Arcade building, like the game's other shops: there is
+  **no teleport**. Look at the Arcade's glass corner doors and press `E` to open them, walk through
+  a short vestibule, and open the arcade's own double door the same way. Doors close by themselves
+  once you walk away. Leave the same way you came in.
+- The building's own glass door models swing open on hinges; the corner panel's sealing collider is
+  replaced at runtime by wall stubs and a lintel around the measured 2.15 m x 2.10 m doorway, and
+  everything is restored when the world unloads.
+- The vestibule (side walls, ceiling, a 4.9 degree ramp from street level up to the room floor) is
+  built from positions measured at runtime, so the path is continuous and collidable.
+- "Inside the arcade" (machine prompts, ambience, building) is decided by your position, not by a
+  teleport flag.
+- Interior floor, ceiling, skirting, trim and neon use Schedule I's own loaded materials (for
+  example `Carpet`, `Ceiling`, `Skirting`, `Trim` and the Arcade building's red/white neon), and
+  wall sconces reuse the building's own light fixture mesh. These are live references to assets the
+  game has already loaded: nothing from the game is extracted, packaged or committed.
+- The mural wall's single door is decorative; the old rear "west side" teleport exit was removed
+  because the 0.8 m gap behind that wall is not a walkable route.
 
 ### Arcade lighting and ambience
 
@@ -46,9 +54,12 @@ Current release: **v0.2.65**
 
 - Four independently placed and movable machines.
 - Live game displays fitted to each machine's sloped glass.
-- Left and right flippers, plunger lane, launch barrel, bumpers, slings, targets, scoring, lives,
-  multipliers, and restart flow.
-- A protected plunger route and launch gate keep the ball from immediately draining.
+- Left and right flippers, plunger lane, one-way lane gate, bumpers, slingshots, drop targets, an
+  orbit lane, scoring, a ball saver, lives, multipliers, and restart flow.
+- Frame-rate independent physics: fixed 1/480 s sub-steps, capsule colliders that cannot be
+  tunnelled through, and flippers that pass their swing speed to the ball.
+- The playfield is closed except for the centre drain between the flippers, and everything drawn is
+  exactly what the ball collides with.
 - Returning balls can be caught by the plunger and launched again.
 - Rounded player collision prevents the cabinets from trapping the player against nearby machines.
 - Tuned gravity, impulses, speed caps, and stopper reactions for smoother, less explosive ball
@@ -62,7 +73,8 @@ Current release: **v0.2.65**
 - Cabinet 2 connects to the separately installed Doom II TV mod.
 - Each bridge validates its DLL, loaded MelonLoader assembly, WAD header, expected WAD path, and
   native runtime before starting.
-- Missing or invalid Doom dependencies fall back to a safe test screen instead of crashing.
+- If a Doom dependency is missing the cabinet shows **OUT OF ORDER - NO CHARGE** with the exact
+  missing file, and never takes the $10. If the external runtime stops mid-game the $10 is refunded.
 - Doom WADs and the external Doom TV mods are not bundled with this project.
 
 ### Arcade TV
@@ -188,8 +200,12 @@ Schedule I/Mods/ScheduleIDoom2TV.dll
 Schedule I/Mods/SchedualDoom2Tv/WAD/Doom2.wad
 ```
 
-If a matching DLL, WAD, assembly, or native runtime is unavailable, that cabinet remains usable in
-test mode.
+Each install also needs the Doom TV mod's own native runtime at
+`Mods/SchedualDoomTv/Runtime/doomgeneric_s1.dll` (Doom II: `Mods/SchedualDoom2Tv/Runtime/...`).
+The Doom cabinets are front-ends for those separately distributed Doom TV mods; this project does
+not contain a Doom engine or any WAD. On load the MelonLoader log states for each cabinet either
+that the runtime and WAD were found or exactly which file is missing. A commercial `DOOM1.WAD`/
+`DOOM2.WAD` must come from the user's own copy of the game.
 
 ## Configuration
 
@@ -207,8 +223,11 @@ MelonLoader stores these settings under the `ScheduleIArcade` preferences catego
 Additional build requirements:
 
 - Windows PowerShell
-- A .NET SDK with the .NET 6 reference pack
-- Blender `4.3.x`
+- A .NET SDK (6 or newer). If the .NET 6 targeting pack is not installed the script compiles
+  against the installed .NET 6.0.x runtime assemblies instead and says so (the DLL then references
+  `System.Private.CoreLib` directly, which loads on MelonLoader's net6 runtime).
+- Blender `4.3.x` only when re-exporting `BlenderEditable/ScheduleIArcade_Editable.blend`; pass
+  `-SkipBlenderExport` to use the packaged layout.
 - A local Schedule I installation containing MelonLoader, S1API, and generated IL2CPP assemblies
 
 Run:
@@ -220,8 +239,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Build-And-Install.ps
 For a compile-only check that does not install into the game:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Build-And-Install.ps1 -BuildOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Build-And-Install.ps1 -BuildOnly -SkipBlenderExport -GameDir "D:\SteamLibrary\steamapps\common\Schedule I"
 ```
+
+The script compiles against the game's own `MelonLoader
+et6`, `Mods\S1API.Il2Cpp.MelonLoader.dll`
+and generated `MelonLoader\Il2CppAssemblies`, and prints the S1API and MelonLoader versions it used.
+
+### Tests
+
+```powershell
+dotnet run -c Release --project tests\ScheduleIArcade.Tests
+dotnet run -c Release --project tests\ArcadeGeometryCheck -- "D:\SteamLibrary\steamapps\common\Schedule I"
+```
+
+`ScheduleIArcade.Tests` runs the pinball simulation headlessly (launch, flipper impulse, colliders,
+tunnelling, closed side lanes, drain/relaunch, 10-240 Hz frame-rate independence) and measures the
+old v0.2.65 physics for comparison. `ArcadeGeometryCheck` reads the installed `level1` read-only and
+checks that the walk-in route from the street into the room is clear for a standing player.
 
 The script exports the Blender-authored layout, runs layout QA, compiles the mod, and writes the DLL
 to `Build/Release/ScheduleIArcade.dll`. A normal build also installs the DLL and runtime assets into
@@ -238,12 +273,13 @@ the detected Schedule I directory.
 
 ## Troubleshooting
 
-- **The entrance prompt does not appear:** finish loading a save, stand near the vanilla Arcade door,
-  and look directly at it.
+- **The door prompt does not appear:** finish loading a save, stand within about 2 m of the Arcade's
+  glass corner doors and look at them. The log line `Walk-in arcade ready` confirms the entrance
+  was prepared; an error there names the missing game object.
 - **A machine will not start:** confirm the player has at least $10 cash and read the interaction
   feedback message.
-- **A Doom cabinet shows test mode:** verify its matching DLL, WAD path, WAD filename, and native
-  runtime files.
+- **A Doom cabinet says OUT OF ORDER:** the prompt and the MelonLoader log name the missing Doom TV
+  mod DLL, WAD or native runtime.
 - **The mod loads but the room is missing:** install the complete ZIP so the
   `Mods/ScheduleIArcade/Assets` directory is present.
 - **A placement ghost is red:** move it clear of walls and other assets or target a registered floor

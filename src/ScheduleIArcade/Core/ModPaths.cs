@@ -17,6 +17,11 @@ internal static class ModPaths
     public static string AudioRoot => Path.Combine(AssetsRoot, "Audio");
     public static string PacManAssetsRoot => Path.Combine(AssetsRoot, "PacMan");
     public static string AmbiencePath => Path.Combine(AudioRoot, Constants.AmbienceFileName);
+    /// <summary>Bundled Doom engine (separate GPL-2.0 assembly), Freedoom IWADs and licences.</summary>
+    public static string DoomRoot => Path.Combine(ModRoot, "Doom");
+    public static string DoomEnginePath => Path.Combine(DoomRoot, "ScheduleIArcade.Doom.dll");
+    /// <summary>Doom save games/config live under UserData, never next to the game executable.</summary>
+    public static string DoomDataRoot => Path.Combine(MelonEnvironment.UserDataDirectory, Constants.ModFolderName, "Doom");
 
     public static void EnsureDirectories()
     {

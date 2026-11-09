@@ -1,3 +1,7 @@
+> **Superseded in 0.3.0.** The knock / NPC-menu / teleport entrance described below was replaced by
+> a physical walk-in entrance (`src/ScheduleIArcade/Services/ArcadeWalkInService.cs`). It is kept
+> only as history.
+
 # Vanilla Arcade Door Integration
 
 The entrance bridge is intentionally built around Schedule I's existing door/NPC systems rather than placing a new world-space teleport button on top of the building.

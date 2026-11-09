@@ -1,6 +1,12 @@
 param(
     [string]$GameDir = "",
-    [switch]$BuildOnly
+    [switch]$BuildOnly,
+    # Compile against the packaged dist\...\arcade_runtime_meshes.bin instead of re-exporting
+    # BlenderEditable\ScheduleIArcade_Editable.blend (use when Blender is not installed).
+    [switch]$SkipBlenderExport,
+    # Skip compiling the bundled Doom engine and staging Freedoom (Doom cabinets then show
+    # OUT OF ORDER and never charge).
+    [switch]$SkipDoom
 )
 
 $ErrorActionPreference = "Stop"
@@ -73,20 +79,42 @@ function Resolve-Csc([string]$DotNetExe) {
 function Resolve-Net6ReferencePack([string]$DotNetExe) {
     $dotnetRoot = Split-Path -Parent $DotNetExe
     $packRoot = Join-Path $dotnetRoot "packs\Microsoft.NETCore.App.Ref"
-    if (-not (Test-Path $packRoot)) {
-        throw ".NET reference packs were not found under $packRoot"
+    if (Test-Path $packRoot) {
+        $versions = Get-ChildItem $packRoot -Directory |
+            Where-Object { $_.Name -like '6.*' } |
+            Sort-Object { [version]($_.Name -replace '-.*$','') } -Descending
+
+        foreach ($version in $versions) {
+            $ref = Join-Path $version.FullName "ref\net6.0"
+            if (Test-Path $ref) { return $ref }
+        }
     }
 
-    $versions = Get-ChildItem $packRoot -Directory |
-        Where-Object { $_.Name -like '6.*' } |
-        Sort-Object { [version]($_.Name -replace '-.*$','') } -Descending
-
-    foreach ($version in $versions) {
-        $ref = Join-Path $version.FullName "ref\net6.0"
-        if (Test-Path $ref) { return $ref }
+    # Newer SDKs (8/9/10) do not ship the net6.0 targeting pack, but MelonLoader 0.7.3 runs mods
+    # on the installed Microsoft.NETCore.App 6.0.x runtime (net6\MelonLoader.runtimeconfig.json).
+    # Its managed implementation assemblies are a valid compile surface for that same runtime.
+    $runtimeRoot = Join-Path $dotnetRoot "shared\Microsoft.NETCore.App"
+    if (Test-Path $runtimeRoot) {
+        $runtime = Get-ChildItem $runtimeRoot -Directory |
+            Where-Object { $_.Name -like '6.*' } |
+            Sort-Object { [version]($_.Name -replace '-.*$','') } -Descending |
+            Select-Object -First 1
+        if ($runtime) {
+            Write-Host "No .NET 6 targeting pack found; compiling against the installed .NET $($runtime.Name) runtime assemblies." -ForegroundColor Yellow
+            return $runtime.FullName
+        }
     }
 
-    throw "The .NET 6 targeting pack is missing. Install the .NET 6 SDK, then rerun Tools\\Build-And-Install.ps1."
+    throw "Neither the .NET 6 targeting pack nor a .NET 6.0.x runtime was found. Install the .NET 6 SDK or .NET 6 runtime, then rerun Tools\\Build-And-Install.ps1."
+}
+
+function Test-ManagedAssembly([string]$Path) {
+    try {
+        [void][System.Reflection.AssemblyName]::GetAssemblyName($Path)
+        return $true
+    } catch {
+        return $false
+    }
 }
 
 
@@ -118,10 +146,14 @@ function Resolve-Blender {
 function Export-BlenderArcadeIfPresent {
     $blend = Join-Path $ProjectRoot "BlenderEditable\ScheduleIArcade_Editable.blend"
     if (-not (Test-Path $blend)) { return }
+    if ($SkipBlenderExport) {
+        Write-Host "Skipping Blender export (-SkipBlenderExport); using the packaged arcade_runtime_meshes.bin." -ForegroundColor Yellow
+        return
+    }
 
     $blender = Resolve-Blender
     if (-not $blender) {
-        throw "BlenderEditable\ScheduleIArcade_Editable.blend exists, but Blender.exe could not be found. Open/save the .blend with Blender installed or remove/rename the BlenderEditable file to use the packaged fallback layout."
+        throw "BlenderEditable\ScheduleIArcade_Editable.blend exists, but Blender.exe could not be found. Install Blender, or rerun with -SkipBlenderExport to use the packaged arcade_runtime_meshes.bin layout."
     }
 
     $exporter = Join-Path $ProjectRoot "BlenderTools\export_runtime_bin.py"
@@ -148,8 +180,16 @@ Write-Step "Checking MelonLoader 0.7.3 installation"
 $melonRoot = Join-Path $GameDir "MelonLoader"
 if (-not (Test-Path $melonRoot)) { throw "MelonLoader folder not found: $melonRoot" }
 
-$melonDll = Get-ChildItem $melonRoot -Recurse -Filter "MelonLoader.dll" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $melonDll) { throw "MelonLoader.dll was not found under $melonRoot" }
+# MelonLoader 0.7.3 ships net35, net472 and net6 builds side by side; an IL2CPP game runs the
+# net6 one. A plain recursive search returns net35\MelonLoader.dll first, so pick net6 explicitly.
+$melonNet6 = Join-Path $melonRoot "net6"
+$melonDll = Get-Item (Join-Path $melonNet6 "MelonLoader.dll") -ErrorAction SilentlyContinue
+if (-not $melonDll) {
+    $melonDll = Get-ChildItem $melonRoot -Recurse -Filter "MelonLoader.dll" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '[\\/]net(35|472)[\\/]' } |
+        Select-Object -First 1
+}
+if (-not $melonDll) { throw "The net6 MelonLoader.dll was not found under $melonRoot" }
 Write-Host "MelonLoader: $($melonDll.FullName)"
 
 Write-Step "Resolving S1API"
@@ -178,12 +218,16 @@ Write-Host "net6:   $net6Ref"
 Write-Step "Collecting Schedule I IL2CPP support references"
 $refs = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::OrdinalIgnoreCase)
 
-Get-ChildItem $net6Ref -Filter "*.dll" -File | ForEach-Object { Add-Reference $refs $_.FullName }
+Get-ChildItem $net6Ref -Filter "*.dll" -File |
+    Where-Object { Test-ManagedAssembly $_.FullName } |
+    ForEach-Object { Add-Reference $refs $_.FullName }
 Add-Reference $refs $melonDll.FullName
 Add-Reference $refs $s1apiDll
 
-# MelonLoader 0.7.3 dependencies required by its public types.
+# MelonLoader 0.7.3 dependencies required by its public types (net6 builds only; the
+# net35/net472 copies of 0Harmony/MonoMod would otherwise win the first-name-wins lookup).
 Get-ChildItem $melonRoot -Recurse -Filter "*.dll" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '[\\/]net(35|472)[\\/]' } |
     Where-Object {
         $_.Name -match '^(Il2CppInterop\.|0Harmony|MonoMod\.|MelonLoader\.Il2Cpp|Unity\.IL2CPP)' -or
         $_.Name -eq 'Il2CppInterop.Runtime.dll'
@@ -228,7 +272,7 @@ $sourceFiles = Get-ChildItem $SourceRoot -Recurse -Filter "*.cs" -File |
 if ($sourceFiles.Count -eq 0) { throw "No C# source files found under $SourceRoot" }
 
 $rspLines = New-Object System.Collections.Generic.List[string]
-$rspLines.Add('/noconfig')
+# /noconfig is passed on the command line: csc ignores it inside a response file (CS2023).
 $rspLines.Add('/nostdlib+')
 $rspLines.Add('/target:library')
 $rspLines.Add('/langversion:latest')
@@ -249,11 +293,75 @@ foreach ($src in $sourceFiles) {
 }
 
 [System.IO.File]::WriteAllLines($Rsp, $rspLines, [System.Text.UTF8Encoding]::new($false))
-& $dotnet $csc "@$Rsp"
+& $dotnet $csc /noconfig "@$Rsp"
 if ($LASTEXITCODE -ne 0) { throw "C# compilation failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path $OutDll)) { throw "Compiler returned success but ScheduleIArcade.dll was not created." }
 
 Write-Host "Built: $OutDll" -ForegroundColor Green
+$s1apiName = [System.Reflection.AssemblyName]::GetAssemblyName($s1apiDll)
+Write-Host "Compiled against S1API $($s1apiName.Version) from $s1apiDll" -ForegroundColor Green
+Write-Host "Compiled against MelonLoader $([System.Reflection.AssemblyName]::GetAssemblyName($melonDll.FullName).Version) from $($melonDll.FullName)" -ForegroundColor Green
+if ($net6Ref -match 'shared.Microsoft\.NETCore\.App') {
+    Write-Host "NOTE: compiled against .NET runtime implementation assemblies ($net6Ref), so the DLL references System.Private.CoreLib directly instead of System.Runtime. It loads on MelonLoader's net6 runtime (6.0.x, rollForward LatestMinor); install the .NET 6 targeting pack for a reference-assembly build." -ForegroundColor Yellow
+}
+
+# ---------------------------------------------------------------------------------------------
+# Bundled Doom engine: src\ScheduleIArcade.Doom (Managed Doom 2.1a + embedded host, GPL-2.0) is a
+# SEPARATE assembly loaded by the mod at runtime. It references only the .NET 6 framework.
+# ---------------------------------------------------------------------------------------------
+if (-not $SkipDoom) {
+    Write-Step "Compiling bundled Doom engine (ScheduleIArcade.Doom.dll, GPL-2.0)"
+    $DoomSource = Join-Path $ProjectRoot "src\ScheduleIArcade.Doom"
+    $DoomOut = Join-Path $OutDir "Doom"
+    New-Item $DoomOut -ItemType Directory -Force | Out-Null
+    $doomDll = Join-Path $DoomOut "ScheduleIArcade.Doom.dll"
+    $doomRsp = Join-Path $OutDir "doom-compiler.rsp"
+    $doomLines = New-Object System.Collections.Generic.List[string]
+    # C# 12 is pinned: C# 14 first-class span conversions change an overload in Video/Renderer.cs.
+    foreach ($o in @('/nostdlib+', '/target:library', '/langversion:12', '/unsafe+', '/optimize+', '/deterministic+', '/debug:portable', '/warn:4', '/nowarn:1701,1702')) { $doomLines.Add($o) }
+    $doomLines.Add('/out:"' + $doomDll + '"')
+    $doomLines.Add('/pdb:"' + (Join-Path $DoomOut "ScheduleIArcade.Doom.pdb") + '"')
+    Get-ChildItem $net6Ref -Filter "*.dll" -File | Where-Object { Test-ManagedAssembly $_.FullName } |
+        ForEach-Object { $doomLines.Add('/reference:"' + $_.FullName + '"') }
+    Get-ChildItem $DoomSource -Recurse -Filter "*.cs" -File | Sort-Object FullName |
+        ForEach-Object { $doomLines.Add('"' + $_.FullName + '"') }
+    [System.IO.File]::WriteAllLines($doomRsp, $doomLines, [System.Text.UTF8Encoding]::new($false))
+    & $dotnet $csc /noconfig "@$doomRsp"
+    if ($LASTEXITCODE -ne 0) { throw "Doom engine compilation failed with exit code $LASTEXITCODE" }
+    Write-Host "Built: $doomDll" -ForegroundColor Green
+
+    Write-Step "Staging Freedoom 0.13.0 game data and licences"
+    $freedoom = Join-Path $ProjectRoot "Build\third_party\freedoom-0.13.0"
+    & (Join-Path $ProjectRoot "Tools\Fetch-Freedoom.ps1") -CacheDir $freedoom
+    Copy-Item (Join-Path $freedoom "freedoom1.wad") $DoomOut -Force
+    Copy-Item (Join-Path $freedoom "freedoom2.wad") $DoomOut -Force
+    $licenseOut = Join-Path $DoomOut "licenses"
+    New-Item $licenseOut -ItemType Directory -Force | Out-Null
+    Copy-Item (Join-Path $DoomSource "LICENSE") (Join-Path $licenseOut "ManagedDoom-and-ScheduleIArcade.Doom-GPL-2.0.txt") -Force
+    Copy-Item (Join-Path $DoomSource "NOTICE.md") (Join-Path $DoomOut "NOTICE.md") -Force
+    Copy-Item (Join-Path $freedoom "COPYING.txt") (Join-Path $licenseOut "Freedoom-COPYING.txt") -Force
+    Copy-Item (Join-Path $freedoom "CREDITS.txt") (Join-Path $licenseOut "Freedoom-CREDITS.txt") -Force
+    Copy-Item (Join-Path $freedoom "CREDITS-MUSIC.txt") (Join-Path $licenseOut "Freedoom-CREDITS-MUSIC.txt") -Force
+
+    # GPL-2.0 section 3(a): ship the complete corresponding source with the binary.
+    $srcStage = Join-Path $OutDir "doom-source-stage\ScheduleIArcade.Doom"
+    if (Test-Path (Split-Path -Parent $srcStage)) { Remove-Item (Split-Path -Parent $srcStage) -Recurse -Force }
+    New-Item $srcStage -ItemType Directory -Force | Out-Null
+    Copy-Item (Join-Path $DoomSource "*") $srcStage -Recurse -Force
+    $buildTxt = @(
+        "Build ScheduleIArcade.Doom.dll (no NuGet packages):",
+        "  csc /noconfig /nostdlib+ /target:library /langversion:12 /unsafe+ /optimize+ /deterministic+",
+        "      /reference:<every managed assembly of Microsoft.NETCore.App 6.0.x> /out:ScheduleIArcade.Doom.dll",
+        "      Engine\**\*.cs Host\*.cs",
+        "Tools/Build-And-Install.ps1 in the ScheduleIArcade repository runs exactly this."
+    )
+    [System.IO.File]::WriteAllLines((Join-Path $srcStage "BUILD.txt"), $buildTxt, [System.Text.UTF8Encoding]::new($false))
+    $srcZip = Join-Path $DoomOut "ScheduleIArcade.Doom-source.zip"
+    if (Test-Path $srcZip) { Remove-Item $srcZip -Force }
+    Compress-Archive -Path $srcStage -DestinationPath $srcZip
+    Remove-Item (Split-Path -Parent $srcStage) -Recurse -Force
+    Write-Host "Staged Doom engine, Freedoom IWADs, licences and corresponding source in $DoomOut" -ForegroundColor Green
+}
 
 if (-not $BuildOnly) {
     Write-Step "Installing test build into Schedule I"
@@ -269,6 +377,13 @@ if (-not $BuildOnly) {
     if (Test-Path $legacyRippedNative) { Remove-Item $legacyRippedNative -Recurse -Force }
 
     Copy-Item $OutDll (Join-Path $modsDir "ScheduleIArcade.dll") -Force
+    $doomBuilt = Join-Path $OutDir "Doom"
+    if (Test-Path $doomBuilt) {
+        $doomDest = Join-Path $modData "Doom"
+        New-Item $doomDest -ItemType Directory -Force | Out-Null
+        Copy-Item (Join-Path $doomBuilt "*") $doomDest -Recurse -Force
+        Write-Host "Installed bundled Doom engine + Freedoom: $doomDest" -ForegroundColor Green
+    }
     if (Test-Path $OutPdb) { Copy-Item $OutPdb (Join-Path $modsDir "ScheduleIArcade.pdb") -Force }
 
     # Runtime-converted copy of the user's supplied FBX + real texture maps. Unity player builds

@@ -3,7 +3,7 @@ namespace ScheduleIArcade.Utils;
 internal static class Constants
 {
     public const string ModName = "Schedule I Arcade";
-    public const string ModVersion = "0.2.65-paid-play-public-release";
+    public const string ModVersion = "0.4.0-doom-audio";
     public const string ModAuthor = "GrandmasAnkles/XUnfairX";
     public const string PreferencesCategory = "ScheduleIArcade";
 
@@ -16,11 +16,12 @@ internal static class Constants
     public const string ScreenPrefix = "ARCADE_SCREEN_";
     public const string SpawnMarkerName = "ARCADE_SPAWN";
     public const string ExitMarkerName = "ARCADE_EXIT";
-    public const string BackExitMarkerName = "ARCADE_BACK_EXIT";
+    public const string RoomDoorRootName = "ARCADE_DOUBLE_DOOR_CHAMFER";
+    public const string RoomDoorHingeA = "ARCADE_DOOR_HINGE_A";
+    public const string RoomDoorHingeB = "ARCADE_DOOR_HINGE_B";
 
     // A close, deliberate look is required before an arcade interaction prompt is shown.
     public const float InteractionDistance = 2.35f;
-    public const float ExitInteractionDistance = 1.15f;
     public const string DefaultGameId = "test_pattern";
 
     // Stable native build identity for the custom arcade. The arcade no longer uses another

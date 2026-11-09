@@ -110,7 +110,7 @@ internal sealed class CabinetInteractionService
                     ? "ARROWS PLAY  •  TAB MENU  •  ESC EXIT"
                     : _session.ActiveCabinet?.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase) == true ||
                       _session.ActiveCabinet?.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase) == true
-                        ? "WASD / ARROWS PLAY  •  ESC EXIT"
+                        ? "WASD/ARROWS MOVE • CTRL/CLICK FIRE • SPACE/E USE • TAB DOOM MENU • ESC EXIT"
                         : _session.ActiveCabinet?.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase) == true
                             ? "LEFT / RIGHT FLIPPERS  •  SPACE LAUNCH  •  ESC EXIT"
                             : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
@@ -128,16 +128,21 @@ internal sealed class CabinetInteractionService
         bool showStartFeedback =
             Time.unscaledTime < _startFeedbackUntil &&
             _lookedAt.Id.Equals(_startFeedbackCabinetId, StringComparison.OrdinalIgnoreCase);
+        string doomProblem = GetDoomProblem(_lookedAt);
         string action = showStartFeedback
             ? _startFeedback
             : _lookedAt.IsOccupied
                 ? "MACHINE IN USE"
-                : "PRESS [E]  PLAY  •  $10 CASH";
+                : doomProblem.Length > 0
+                    ? "OUT OF ORDER  •  NO CHARGE"
+                    : "PRESS [E]  PLAY  •  $10 CASH";
         string detail = showStartFeedback
-            ? "A game only charges when its session starts successfully."
+            ? (doomProblem.Length > 0 ? doomProblem : "A game only charges when its session starts successfully.")
             : _lookedAt.IsOccupied
                 ? "Wait for the current player to finish."
-                : GetGameDescription(_lookedAt) + "  •  [F] picks it up to move it.";
+                : doomProblem.Length > 0
+                    ? doomProblem
+                    : GetGameDescription(_lookedAt) + "  •  [F] picks it up to move it.";
         ArcadePromptUi.DrawCard(
             GetDisplayName(_lookedAt),
             action,
@@ -150,14 +155,39 @@ internal sealed class CabinetInteractionService
                 : new Color(0.10f, 0.88f, 1.00f, 1f));
     }
 
+    private string _doomProblemGameId = string.Empty;
+    private string _doomProblem = string.Empty;
+    private float _doomProblemCheckedAt = -999f;
+
+    /// <summary>Empty when the cabinet is not Doom or its external dependency is ready;
+    /// otherwise the exact missing file/mod. Cached briefly because it touches the file system.</summary>
+    private string GetDoomProblem(ArcadeCabinet cabinet)
+    {
+        DoomCabinetEdition edition;
+        if (cabinet.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase))
+            edition = DoomCabinetEdition.Doom1;
+        else if (cabinet.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase))
+            edition = DoomCabinetEdition.Doom2;
+        else
+            return string.Empty;
+
+        if (!_doomProblemGameId.Equals(cabinet.GameId, StringComparison.OrdinalIgnoreCase) || Time.unscaledTime - _doomProblemCheckedAt > 3f)
+        {
+            _doomProblemGameId = cabinet.GameId;
+            _doomProblemCheckedAt = Time.unscaledTime;
+            _doomProblem = EmbeddedDoomBridge.IsReady(edition, out string detail) ? string.Empty : detail;
+        }
+        return _doomProblem;
+    }
+
     private static string GetGameDescription(ArcadeCabinet cabinet)
     {
         if (cabinet.Id.Equals("TV", StringComparison.OrdinalIgnoreCase))
             return "Pong + Snake";
         if (cabinet.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase))
-            return "Doom I";
+            return "Freedoom: Phase 1 (Doom engine)";
         if (cabinet.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase))
-            return "Doom II";
+            return "Freedoom: Phase 2 (Doom engine)";
         if (cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
             return "Space Cadet pinball";
         if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
@@ -174,9 +204,9 @@ internal sealed class CabinetInteractionService
         if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
             return "PAC-MAN COCKTAIL TABLE";
         if (cabinet.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase))
-            return "DOOM I CABINET";
+            return "DOOM CABINET 1";
         if (cabinet.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase))
-            return "DOOM II CABINET";
+            return "DOOM CABINET 2";
         if (cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
             return "SPACE CADET PINBALL";
         return cabinet.Id switch
