@@ -23,67 +23,112 @@ internal sealed class ArcadeSurfaceMaterials : IDisposable
     public Vector2 CeilingUv { get; private set; } = Vector2.one;
     public string Summary { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Resolves the four shell surfaces. Every surface is resolved independently and can never throw:
+    /// live game material clone -> procedural texture -> flat solid colour. One failing surface
+    /// (e.g. a texture upload error) must never abort the arcade build (0.6.0 bug: a throwing
+    /// LoadRawTextureData here abandoned the whole walk-in interior).
+    /// </summary>
     public void Resolve()
     {
-        GameMaterialLibrary.Reset();
         var notes = new List<string>();
+        try { GameMaterialLibrary.Reset(); }
+        catch (Exception ex) { MelonLogger.Warning($"Arcade surfaces: material index reset failed ({ex.Message}); using fallbacks where needed."); }
 
-        Material? carpet = GameMaterialLibrary.Find("Carpet", "Carpet1", "carpet crimson mat", "carpet red mat");
-        if (carpet != null)
-        {
-            Floor = Clone(carpet, "ScheduleIArcade_M_Floor_" + carpet.name);
-            FloorUv = new Vector2(2f, 2f);
-            notes.Add("floor=live '" + carpet.name + "'");
-        }
-        else
-        {
-            Floor = Procedural(SurfacePatterns.Kind.Carpet, "ScheduleIArcade_M_FloorCarpet", 0.08f);
-            FloorUv = Vector2.one * SurfacePatterns.MetresPerTile(SurfacePatterns.Kind.Carpet);
-            notes.Add("floor=procedural carpet");
-        }
+        Floor = ResolveSurface("floor", SurfacePatterns.Kind.Carpet, "ScheduleIArcade_M_FloorCarpet", 0.08f, notes,
+            () => GameMaterialLibrary.Find("Carpet", "Carpet1", "carpet crimson mat", "carpet red mat"),
+            live => { Material m = Clone(live, "ScheduleIArcade_M_Floor_" + live.name); FloorUv = new Vector2(2f, 2f); return m; },
+            uv => FloorUv = uv);
 
         // Wallpaper_B* is a light patterned paper with a wainscot band at the bottom of the texture;
         // one texture repeat spans the full 3.5 m wall height and the clone is tinted dark.
-        Material? paper = GameMaterialLibrary.Find("Wallpaper_B2", "Wallpaper_B1", "Wallpaper_B");
-        if (paper != null && (paper.HasProperty("_Color") || paper.HasProperty("_BaseColor")))
-        {
-            Wall = Clone(paper, "ScheduleIArcade_M_Wall_" + paper.name);
-            var dark = new Color(0.30f, 0.30f, 0.36f, 1f);
-            foreach (string p in new[] { "_Color", "_BaseColor", "_Mat1_Color", "_Mat2_Color" })
-                if (Wall.HasProperty(p)) Wall.SetColor(p, new Color(dark.r, dark.g, dark.b, Wall.GetColor(p).a));
-            if (Wall.HasProperty("_EmissionColor")) Wall.SetColor("_EmissionColor", Wall.GetColor("_EmissionColor") * 0.25f);
-            WallUv = new Vector2(ArcadeDimensions.InteriorWallHeight, ArcadeDimensions.InteriorWallHeight);
-            notes.Add("walls=live '" + paper.name + "' (dark tint)");
-        }
-        else
-        {
-            Wall = Procedural(SurfacePatterns.Kind.Wallpaper, "ScheduleIArcade_M_WallDarkPaper", 0.12f);
-            WallUv = Vector2.one * SurfacePatterns.MetresPerTile(SurfacePatterns.Kind.Wallpaper);
-            notes.Add("walls=procedural dark wallpaper");
-        }
+        Wall = ResolveSurface("walls", SurfacePatterns.Kind.Wallpaper, "ScheduleIArcade_M_WallDarkPaper", 0.12f, notes,
+            () =>
+            {
+                Material? paper = GameMaterialLibrary.Find("Wallpaper_B2", "Wallpaper_B1", "Wallpaper_B");
+                return paper != null && (paper.HasProperty("_Color") || paper.HasProperty("_BaseColor")) ? paper : null;
+            },
+            paper =>
+            {
+                Material m = Clone(paper, "ScheduleIArcade_M_Wall_" + paper.name);
+                var dark = new Color(0.30f, 0.30f, 0.36f, 1f);
+                foreach (string p in new[] { "_Color", "_BaseColor", "_Mat1_Color", "_Mat2_Color" })
+                    if (m.HasProperty(p)) m.SetColor(p, new Color(dark.r, dark.g, dark.b, m.GetColor(p).a));
+                if (m.HasProperty("_EmissionColor")) m.SetColor("_EmissionColor", m.GetColor("_EmissionColor") * 0.25f);
+                WallUv = new Vector2(ArcadeDimensions.InteriorWallHeight, ArcadeDimensions.InteriorWallHeight);
+                return m;
+            },
+            uv => WallUv = uv);
 
-        Material? ceiling = GameMaterialLibrary.Find("Ceiling", "ceiling_0");
-        if (ceiling != null)
-        {
-            Ceiling = Clone(ceiling, "ScheduleIArcade_M_Ceiling_" + ceiling.name);
-            CeilingUv = new Vector2(1.2f, 1.2f);
-            notes.Add("ceiling=live '" + ceiling.name + "'");
-        }
-        else
-        {
-            Ceiling = Procedural(SurfacePatterns.Kind.CeilingTiles, "ScheduleIArcade_M_CeilingTiles", 0.10f);
-            CeilingUv = Vector2.one * SurfacePatterns.MetresPerTile(SurfacePatterns.Kind.CeilingTiles);
-            notes.Add("ceiling=procedural tiles");
-        }
+        Ceiling = ResolveSurface("ceiling", SurfacePatterns.Kind.CeilingTiles, "ScheduleIArcade_M_CeilingTiles", 0.10f, notes,
+            () => GameMaterialLibrary.Find("Ceiling", "ceiling_0"),
+            live => { Material m = Clone(live, "ScheduleIArcade_M_Ceiling_" + live.name); CeilingUv = new Vector2(1.2f, 1.2f); return m; },
+            uv => CeilingUv = uv);
 
-        Material? skirting = GameMaterialLibrary.Find("Skirting", "Trim");
-        Skirting = skirting != null ? Clone(skirting, "ScheduleIArcade_M_Skirting") : Solid("ScheduleIArcade_M_Skirting", new Color(0.12f, 0.12f, 0.13f, 1f), 0.2f);
-        notes.Add(skirting != null ? "skirting=live '" + skirting.name + "'" : "skirting=procedural");
+        Material? skirting = null;
+        try
+        {
+            Material? live = GameMaterialLibrary.Find("Skirting", "Trim");
+            if (live != null)
+            {
+                skirting = Clone(live, "ScheduleIArcade_M_Skirting");
+                notes.Add("skirting=live '" + live.name + "'");
+            }
+        }
+        catch (Exception ex) { MelonLogger.Warning($"Arcade surfaces: live skirting material failed ({ex.Message}); using solid."); }
+        if (skirting == null)
+        {
+            skirting = Solid("ScheduleIArcade_M_Skirting", new Color(0.12f, 0.12f, 0.13f, 1f), 0.2f);
+            notes.Add("skirting=solid");
+        }
+        Skirting = skirting;
 
         // Every shell surface is a closed solid; render both faces anyway so no face is ever see-through.
         foreach (Material m in new[] { Floor, Wall, Ceiling, Skirting })
-            if (m.HasProperty("_Cull")) m.SetFloat("_Cull", 0f);
+        {
+            try { if (m != null && m.HasProperty("_Cull")) m.SetFloat("_Cull", 0f); }
+            catch { /* cosmetic only */ }
+        }
         Summary = string.Join(", ", notes);
+        MelonLogger.Msg("Arcade surface materials: " + Summary + ".");
+    }
+
+    /// <summary>live clone -> procedural texture -> solid base colour; logs which source won.</summary>
+    private Material ResolveSurface(string label, SurfacePatterns.Kind kind, string proceduralName, float smoothness, List<string> notes,
+        Func<Material?> findLive, Func<Material, Material> cloneLive, Action<Vector2> setUv)
+    {
+        try
+        {
+            Material? live = findLive();
+            if (live != null)
+            {
+                Material m = cloneLive(live);
+                notes.Add(label + "=live '" + live.name + "'");
+                return m;
+            }
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"Arcade surfaces: live {label} material failed ({ex.Message}); trying procedural.");
+        }
+
+        Vector2 tile = Vector2.one * SurfacePatterns.MetresPerTile(kind);
+        try
+        {
+            Material m = Procedural(kind, proceduralName, smoothness, out string how);
+            setUv(tile);
+            notes.Add(label + "=procedural " + kind + " (" + how + ")");
+            return m;
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"Arcade surfaces: procedural {label} texture failed ({ex.Message}); using solid colour.");
+        }
+
+        var (r, g, b) = SurfacePatterns.BaseColor(kind);
+        setUv(tile);
+        notes.Add(label + "=solid fallback");
+        return Solid(proceduralName + "_Solid", new Color32(r, g, b, 255), smoothness);
     }
 
     private Material Clone(Material source, string name)
@@ -95,7 +140,10 @@ internal sealed class ArcadeSurfaceMaterials : IDisposable
 
     public Material Solid(string name, Color color, float smoothness, Color? emission = null)
     {
-        Shader? shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+        Shader? shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Universal Render Pipeline/Simple Lit")
+            ?? Shader.Find("Standard") ?? Shader.Find("Unlit/Color");
+        if (shader == null)
+            throw new InvalidOperationException("No lit shader found for arcade surface '" + name + "'.");
         var m = new Material(shader) { name = name };
         if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
         if (m.HasProperty("_Color")) m.SetColor("_Color", color);
@@ -111,18 +159,43 @@ internal sealed class ArcadeSurfaceMaterials : IDisposable
         return m;
     }
 
-    private Material Procedural(SurfacePatterns.Kind kind, string name, float smoothness)
+    /// <summary>
+    /// Uploads a <see cref="SurfacePatterns"/> texture. <see cref="SurfacePatterns.Generate"/> returns
+    /// mip 0 ONLY (Size*Size*4 bytes); LoadRawTextureData on a mipmapped Texture2D needs the full chain
+    /// (<see cref="SurfacePatterns.RawTextureBytes"/> with mipChain: true) and throws otherwise. So:
+    /// mipmapped texture filled with SetPixels32 (mip 0) + Apply(true) to generate mips; if that fails,
+    /// a mip-less texture with LoadRawTextureData of exactly the mip-0 bytes.
+    /// </summary>
+    private Material Procedural(SurfacePatterns.Kind kind, string name, float smoothness, out string how)
     {
         byte[] px = SurfacePatterns.Generate(kind);
-        var texture = new Texture2D(SurfacePatterns.Size, SurfacePatterns.Size, TextureFormat.RGBA32, true)
+        int size = SurfacePatterns.Size;
+        Texture2D? texture = null;
+        try
         {
-            name = name + "_T",
-            wrapMode = TextureWrapMode.Repeat,
-            filterMode = FilterMode.Trilinear,
-            anisoLevel = 8
-        };
-        texture.LoadRawTextureData(px);
-        texture.Apply(true, false);
+            var pixels = new Color32[size * size];
+            for (int i = 0; i < pixels.Length; i++)
+                pixels[i] = new Color32(px[i * 4], px[i * 4 + 1], px[i * 4 + 2], px[i * 4 + 3]);
+            texture = new Texture2D(size, size, TextureFormat.RGBA32, true) { name = name + "_T" };
+            texture.SetPixels32(pixels);
+            texture.Apply(true, false);
+            how = "mipmapped";
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"Arcade surfaces: mipmapped {kind} texture failed ({ex.Message}); retrying without mips.");
+            if (texture != null) UnityEngine.Object.Destroy(texture);
+            int expected = SurfacePatterns.RawTextureBytes(size, size, mipChain: false);
+            if (px.Length != expected)
+                throw new InvalidOperationException($"{kind} pattern has {px.Length} bytes, expected {expected}.");
+            texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { name = name + "_T" };
+            texture.LoadRawTextureData(px);
+            texture.Apply(false, false);
+            how = "no mips";
+        }
+        texture.wrapMode = TextureWrapMode.Repeat;
+        texture.filterMode = how == "mipmapped" ? FilterMode.Trilinear : FilterMode.Bilinear;
+        texture.anisoLevel = 8;
         _created.Add(texture);
         Material m = Solid(name, Color.white, smoothness);
         if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", texture);

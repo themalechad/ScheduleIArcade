@@ -168,6 +168,13 @@ penetration and machine overlaps and can snap flush to the arcade's straight wal
 - Geometry check extended (bounds vs the building, single floor, closed shell, one door, no vestibule, level threshold, swing arc, walkways, roof, game navmesh at the door).
 - This fork's 0.6.0 public package (no game files): https://github.com/themalechad/ScheduleIArcade/releases/tag/v0.6.0
 
+## 0.6.1 changes (hotfix)
+
+- **Bug in 0.6.0:** in game the arcade stayed the vanilla building. The log showed `Failed to build the arcade room: ... LoadRawTextureData: not enough data provided (will result in overread)` from `ArcadeSurfaceMaterials.Procedural`, after which the mod spawned the disconnected procedural TEST room. The procedural carpet/wallpaper/ceiling texture was created with a mip chain but filled with mip-0-only bytes (128x128x4 = 65,536; a mipmapped RGBA32 128x128 texture needs 87,380), so Unity threw and the whole interior build was abandoned. The later "raw room package is not available" warning was a side effect, not the cause.
+- **Fix:** procedural surfaces fill mip 0 with `SetPixels32` and generate mips with `Apply(true)`, with a mip-less `LoadRawTextureData` fallback of exactly mip-0 size. Each surface now falls back on its own (live material -> procedural -> solid colour) and the chosen source is logged (`Arcade surface materials: floor=..., walls=..., ceiling=..., skirting=...`). Cabinet paint textures, the TV / Pac-Man screens, interior lights, the LocalAssets pack and NPC navmesh are optional steps that log a warning and are skipped instead of aborting the arcade.
+- New headless test: surface patterns are mip 0 only (`SurfacePatterns.RawTextureBytes` gives the required buffer length with/without mips).
+- This fork's 0.6.1 public package (no game files): https://github.com/themalechad/ScheduleIArcade/releases/tag/v0.6.1
+
 ## Installation
 
 ### Requirements

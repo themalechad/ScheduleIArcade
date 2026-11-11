@@ -46,7 +46,9 @@ internal sealed class RawArcadeSceneService : IDisposable
 
         try
         {
-            _surfaces.Resolve();
+            // Surfaces are optional dressing: Resolve() falls back per surface and never aborts the build.
+            try { _surfaces.Resolve(); }
+            catch (Exception matEx) { MelonLogger.Warning($"Arcade surface materials failed ({matEx.Message}); building the shell anyway."); }
             var shell = new ArcadeShellBuilder(_meshes, _surfaces);
             shell.Build(root.transform);
             FloorMesh = shell.FloorMesh;
@@ -65,8 +67,8 @@ internal sealed class RawArcadeSceneService : IDisposable
             if (stream.Position != stream.Length)
                 MelonLogger.Warning($"Raw arcade mesh package has {stream.Length - stream.Position} unread byte(s).");
 
-            CreateInteractiveArcadeTv(root.transform);
-            CreatePacmanTableScreen(root.transform);
+            Optional("arcade TV", () => CreateInteractiveArcadeTv(root.transform));
+            Optional("Pac-Man table screen", () => CreatePacmanTableScreen(root.transform));
             CreateActualDoorMarkers(root.transform, out spawnMarker, out exitMarker);
             try
             {
@@ -79,7 +81,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             {
                 MelonLogger.Warning($"Arcade room loaded, but cabinet screen setup failed: {screenEx.Message}");
             }
-            CreateInteriorLights(root.transform);
+            Optional("interior lights", () => CreateInteriorLights(root.transform));
 
             Physics.SyncTransforms();
             MelonLogger.Msg("Arcade machines placed over the whole ground floor and repainted in Schedule I's flat style (no 0.5.0 room or cabinet textures are used).");
@@ -91,6 +93,13 @@ internal sealed class RawArcadeSceneService : IDisposable
             Dispose();
             return false;
         }
+    }
+
+    /// <summary>Runs an optional build step; a failure is logged and the arcade build continues.</summary>
+    private static void Optional(string step, Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { MelonLogger.Warning($"Arcade room: optional step '{step}' failed and was skipped: {ex.Message}"); }
     }
 
     private static void ValidateHeader(BinaryReader reader)
@@ -199,7 +208,13 @@ internal sealed class RawArcadeSceneService : IDisposable
         float frontSign = isArcadeCabinet && modelName.EndsWith("02", StringComparison.Ordinal) ? 1f : -1f;
         float[] flat = new float[vertices.Length * 3];
         for (int i = 0; i < vertices.Length; i++) { flat[i * 3] = vertices[i].x; flat[i * 3 + 1] = vertices[i].y; flat[i * 3 + 2] = vertices[i].z; }
-        Material material = CreatePaintMaterial(modelName);
+        Material material;
+        try { material = CreatePaintMaterial(modelName); }
+        catch (Exception paintEx)
+        {
+            MelonLogger.Warning($"Arcade room: paint texture for '{modelName}' failed ({paintEx.Message}); using a solid colour.");
+            material = LitMaterial("ScheduleIArcade_M_PaintSolid_" + modelName, new Color(0.18f, 0.18f, 0.2f, 1f), 0.22f);
+        }
 
         Mesh mesh = PaintedMesh(modelName, kind, frontSign, flat, normals, triangles, out PaintPart[] parts);
         _painted[modelName] = (flat, triangles, parts);

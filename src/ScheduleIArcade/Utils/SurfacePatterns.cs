@@ -35,6 +35,26 @@ internal static class SurfacePatterns
         _ => (196, 194, 186),
     };
 
+    /// <summary>
+    /// Bytes Unity's Texture2D.LoadRawTextureData requires for an RGBA32 texture of this size: mip 0
+    /// only when created with mipChain: false, the WHOLE chain (down to 1x1) when mipChain: true.
+    /// <see cref="Generate"/> returns mip 0 only, so it must never be loaded raw into a mipmapped
+    /// texture (that threw "not enough data provided" in 0.6.0 and aborted the arcade build).
+    /// </summary>
+    public static int RawTextureBytes(int width, int height, bool mipChain)
+    {
+        int total = 0;
+        while (true)
+        {
+            total += width * height * 4;
+            if (!mipChain || (width == 1 && height == 1))
+                return total;
+            width = Math.Max(1, width / 2);
+            height = Math.Max(1, height / 2);
+        }
+    }
+
+    /// <summary>Returns mip 0 ONLY: exactly <c>Size * Size * 4</c> RGBA32 bytes (row 0 = bottom).</summary>
     public static byte[] Generate(Kind kind, int seed = 1)
     {
         var px = new byte[Size * Size * 4];

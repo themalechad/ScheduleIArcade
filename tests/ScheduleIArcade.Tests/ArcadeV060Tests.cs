@@ -103,6 +103,26 @@ internal static class ArcadeV060Tests
         }
     }
 
+    /// <summary>
+    /// 0.6.0 regression: Generate() returns mip 0 only, and that buffer was passed to
+    /// LoadRawTextureData on a Texture2D created with mipChain: true, which needs the whole chain
+    /// (Unity threw "not enough data provided" and the whole arcade build was abandoned).
+    /// </summary>
+    public static void SurfacePatternsAreMip0Only()
+    {
+        int mip0 = SurfacePatterns.Size * SurfacePatterns.Size * 4;
+        Assert.True(SurfacePatterns.RawTextureBytes(SurfacePatterns.Size, SurfacePatterns.Size, false) == mip0, "mip-0 size helper");
+        int chain = SurfacePatterns.RawTextureBytes(SurfacePatterns.Size, SurfacePatterns.Size, true);
+        Assert.True(chain == 87380, $"full 128x128 RGBA32 chain should be 87380 bytes, got {chain}");
+        Assert.True(SurfacePatterns.RawTextureBytes(4, 2, true) == (4 * 2 + 2 * 1 + 1 * 1) * 4, "non-square chain");
+        foreach (SurfacePatterns.Kind kind in Enum.GetValues(typeof(SurfacePatterns.Kind)))
+        {
+            byte[] px = SurfacePatterns.Generate(kind);
+            Assert.True(px.Length == mip0, $"{kind}: {px.Length} bytes, expected exactly mip 0 ({mip0})");
+            Assert.True(px.Length < chain, $"{kind}: a mipmapped LoadRawTextureData would need {chain} bytes, so mip-0 data must use a mip-less texture or SetPixels32 + Apply(true)");
+        }
+    }
+
     public static void DoomPictureFillsTheMeasuredCrt()
     {
         string? bin = FindPackage();

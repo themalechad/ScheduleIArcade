@@ -53,7 +53,8 @@ internal sealed class ArcadeRuntime : IDisposable
         _cabinets.Scan(_location.RoomInstance);
         LogDoomDependencies();
 
-        LocalAssetPack.Initialize();
+        try { LocalAssetPack.Initialize(); }
+        catch (Exception ex) { MelonLogger.Warning($"Arcade LocalAssets pack skipped: {ex.Message}"); }
 
         _dressing = new ArcadeInteriorDressingService();
         try { _dressing.Apply(_location.RoomInstance, _location.UsingRawScene); }
@@ -69,7 +70,10 @@ internal sealed class ArcadeRuntime : IDisposable
         // NPCs and police walk in through the same door: arcade floor navmesh + door link + carved cabinets.
         _npcAccess = new ArcadeNpcAccessService(_location);
         if (_walkIn.IsWalkInReady)
-            _npcAccess.Initialize();
+        {
+            try { _npcAccess.Initialize(); }
+            catch (Exception ex) { MelonLogger.Warning($"Arcade NPC access skipped: {ex.Message}"); }
+        }
         ArcadeWalkInService walkIn = _walkIn;
         _interaction = new CabinetInteractionService(_cabinets, _session, () => walkIn.IsInsideArcade);
         _customAssets = new ArcadeCustomAssetPlacementService(
