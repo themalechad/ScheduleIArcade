@@ -62,9 +62,6 @@ internal sealed class RawArcadeSceneService : IDisposable
     /// <summary>Top of the walkable floor (the visible checkerboard plane).</summary>
     private const float FloorTopY = 0.043f;
 
-    // Default layout overrides that keep >= 1.0 m walkways: Pac-Man table <-> air hockey <-> east wall.
-    private const float PacmanTableX = -0.27f;
-    private const float AirHockeyX = 1.67f;
 
     /// <summary>
     /// Environment islands removed at load (source-mesh coordinates, before the footprint stretch):
@@ -377,10 +374,14 @@ internal sealed class RawArcadeSceneService : IDisposable
         {
             if (packageVersion >= 2)
             {
-                if (isPacmanCocktail)
-                    authoredPosition.x = PacmanTableX;
-                else if (isAirHockey)
-                    authoredPosition.x = AirHockeyX;
+                // 0.4.1 floor plan (ArcadeLayout): pinball bank, Doom pair, open-floor tables.
+                LayoutSlot? slot = ArcadeLayout.Machine(modelName);
+                if (slot != null)
+                {
+                    authoredPosition.x = slot.X;
+                    authoredPosition.z = slot.Z;
+                    authoredYaw = slot.Yaw;
+                }
                 go.transform.localPosition = authoredPosition;
                 go.transform.localRotation = Quaternion.Euler(0f, authoredYaw, 0f);
             }

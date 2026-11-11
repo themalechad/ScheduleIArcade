@@ -1,4 +1,4 @@
-using MelonLoader;
+﻿using MelonLoader;
 using S1API.Entities;
 using ScheduleIArcade.Configuration;
 using ScheduleIArcade.Utils;
@@ -183,6 +183,7 @@ internal sealed class ArcadeWalkInService : IDisposable
             BuildVestibule(cornerDoor, buildingDoorCenter, along, inward, depth, Mathf.Max(doorwayHalfWidth, roomDoorHalfWidth) + 0.12f, doorwayHalfWidth, doorwayHeight, floorRise, vestibuleHeight, roomDoorHalfWidth, roomDoor);
 
             CollectInteriorOccluders(building, buildingDoorCenter);
+            HideStrayVanillaInsideRoom();
             MelonLogger.Msg(cloned > 0
                 ? $"Walk-in entrance: {cloned} leaf/leaves cloned from the vanilla '{sourceName}' (PivotDoor glass door model, transparent glass); vestibule {vestibuleHeight:0.00} m high."
                 : $"Walk-in entrance: no unbatched vanilla glass PivotDoor leaf was loaded; built matching glass leaves with {(glass != null ? glass.name : "fallback")} glass.");
@@ -338,11 +339,14 @@ internal sealed class ArcadeWalkInService : IDisposable
             Renderer? renderer = occluder != null ? occluder.GetComponent<Renderer>() : null;
             if (renderer == null)
                 continue;
-            _interiorOccluders.Add(renderer);
+            // Always hide the host building's fake-interior boxes so the storefront glass
+            // can show our dressed arcade from the street, not a sealed white volume.
             bool original = renderer.enabled;
+            renderer.enabled = false;
             Renderer captured = renderer;
             _restore.Add(() => { if (captured != null) captured.enabled = original; });
         }
+        ApplyHostWindowGlass(building, FindTransparentGlass());
     }
 
     private void UpdateInteriorOccluders(Vector3 playerPosition)
@@ -359,6 +363,149 @@ internal sealed class ArcadeWalkInService : IDisposable
             if (renderer != null)
                 renderer.enabled = !near;
         }
+    }
+
+    /// <summary>
+    /// Hides only vanilla Map geometry whose bounds centre lies inside our arcade interior (for
+    /// example a stray chair, stool or pipe of the host building poking through our walls). The
+    /// building's own fake-interior boxes are handled by the occluder toggle and are skipped; nothing
+    /// outside the interior (street facades, signs, other buildings) is touched. Restored on Dispose.
+    /// </summary>
+    private void HideStrayVanillaInsideRoom()
+    {
+        if (_location.RoomInstance == null)
+            return;
+        Transform room = _location.RoomInstance.transform;
+        var hidden = new List<string>();
+        foreach (MeshRenderer renderer in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
+        {
+            if (renderer == null || !renderer.enabled)
+                continue;
+            Transform t = renderer.transform;
+            if (t.root == null || t.root.name != "Map" || t.IsChildOf(room))
+                continue;
+            if (_interiorOccluders.Contains(renderer))
+                continue;
+            string n = t.gameObject.name;
+            if (n == "Cube" || n == "Block")
+                continue;
+            bool known = IsKnownInteriorStray(t);
+            Bounds b = renderer.bounds;
+            // Huge objects (terrain, combined batches, the building shell) are never "inside".
+            // Floor-to-ceiling pipes are allowed a taller Y if their footprint is thin.
+            bool thinUpright = b.size.x <= 0.7f && b.size.z <= 0.7f;
+            if (b.size.x > 3f || b.size.z > 3f || b.size.y > (known || thinUpright ? 5.0f : 3.5f))
+                continue;
+            Vector3 local = room.InverseTransformPoint(b.center);
+            Vector3 toward = new Vector3(-local.x, 0f, -local.z);
+            if (toward.sqrMagnitude > 0.0001f)
+                toward = toward.normalized * 0.35f;
+            Vector3 probed = local + toward;
+            bool inside = (local.y > 0.05f && RawArcadeSceneService.IsInsideInteriorLocal(local))
+                          || (known && probed.y > 0.05f && RawArcadeSceneService.IsInsideInteriorLocal(probed));
+            if (!inside)
+                continue;
+            renderer.enabled = false;
+            MeshRenderer captured = renderer;
+            _restore.Add(() => { if (captured != null) captured.enabled = true; });
+            foreach (Collider collider in t.GetComponentsInChildren<Collider>(true))
+            {
+                if (collider == null || !collider.enabled) continue;
+                collider.enabled = false;
+                Collider c = collider;
+                _restore.Add(() => { if (c != null) c.enabled = true; });
+            }
+            hidden.Add(VanillaPropLibrary.PathOf(t));
+        }
+        MelonLogger.Msg(hidden.Count == 0
+            ? "Walk-in arcade: no stray vanilla geometry inside the arcade interior."
+            : "Walk-in arcade: hid " + hidden.Count + " stray vanilla object(s) inside the arcade interior: " + string.Join("; ", hidden));
+    }
+
+    /// <summary>
+    /// Named leftovers of the host Northtown Arcade (side industrial door, seating, pipes) that
+    /// should be hidden when they poke into our interior. Facade pieces (corner doors, window
+    /// walls, neon, signs) are never treated as strays.
+    /// </summary>
+    private static bool IsKnownInteriorStray(Transform t)
+    {
+        for (Transform? p = t; p != null; p = p.parent)
+        {
+            string n = p.gameObject.name;
+            if (n is "Map" or "Hyland Point" or "Region_Northtown" or "Arcade (1)")
+                break;
+            if (n.StartsWith("CornerDoor", StringComparison.Ordinal) || n.StartsWith("WindowWall", StringComparison.Ordinal)
+                || n.StartsWith("CornerWindowWall", StringComparison.Ordinal) || n.StartsWith("UpperWindowWall", StringComparison.Ordinal)
+                || n.StartsWith("Neon", StringComparison.Ordinal) || n.Contains("Curved Wall Light", StringComparison.Ordinal))
+                return false;
+            int paren = n.LastIndexOf(" (", StringComparison.Ordinal);
+            string b = (paren > 0 && n.EndsWith(")", StringComparison.Ordinal) && int.TryParse(n.Substring(paren + 2, n.Length - paren - 3), out _))
+                ? n.Substring(0, paren) : n;
+            if (b.Equals("Industrial Metal Door (Static)", StringComparison.Ordinal)
+                || b.Equals("Chair", StringComparison.Ordinal) || b.Equals("Chair_Business", StringComparison.Ordinal)
+                || b.Equals("Armchair", StringComparison.Ordinal) || b.Equals("Bench", StringComparison.Ordinal)
+                || b.IndexOf("stool", StringComparison.OrdinalIgnoreCase) >= 0
+                || (b.IndexOf("Pipe", StringComparison.OrdinalIgnoreCase) >= 0 && b.IndexOf("Pipeline", StringComparison.OrdinalIgnoreCase) < 0))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Replaces opaque panes on the host Arcade's own WindowWall / CornerWindowWall /
+    /// UpperWindowWall glass with the game's transparent shop-window material so the street
+    /// can see into our interior. Frame materials are left alone. Restored on Dispose.
+    /// </summary>
+    private void ApplyHostWindowGlass(Transform building, Material? glass)
+    {
+        if (glass == null)
+            return;
+        int swapped = 0;
+        foreach (MeshRenderer renderer in building.GetComponentsInChildren<MeshRenderer>(true))
+        {
+            if (renderer == null)
+                continue;
+            bool underWindow = false;
+            for (Transform? p = renderer.transform; p != null && p != building; p = p.parent)
+            {
+                string n = p.gameObject.name;
+                if (n.StartsWith("WindowWall", StringComparison.Ordinal) || n.StartsWith("CornerWindowWall", StringComparison.Ordinal)
+                    || n.StartsWith("UpperWindowWall", StringComparison.Ordinal) || n.StartsWith("LargeWindowFrame", StringComparison.Ordinal)
+                    || n.StartsWith("WindowFrame", StringComparison.Ordinal))
+                {
+                    underWindow = true;
+                    break;
+                }
+            }
+            if (!underWindow)
+                continue;
+            string rn = renderer.gameObject.name;
+            if (rn.IndexOf("glass", StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+            Material[] original = renderer.sharedMaterials;
+            Material[] replaced = (Material[])original.Clone();
+            bool any = false;
+            for (int i = 0; i < replaced.Length; i++)
+            {
+                Material? mat = replaced[i];
+                if (mat == null || mat == glass)
+                    continue;
+                if (mat.name.IndexOf("opaque", StringComparison.OrdinalIgnoreCase) >= 0 || mat.renderQueue < 2450)
+                {
+                    replaced[i] = glass;
+                    any = true;
+                }
+            }
+            if (!any)
+                continue;
+            renderer.sharedMaterials = replaced;
+            MeshRenderer captured = renderer;
+            Material[] restore = original;
+            _restore.Add(() => { if (captured != null) captured.sharedMaterials = restore; });
+            swapped++;
+        }
+        if (swapped > 0)
+            MelonLogger.Msg($"Walk-in entrance: applied see-through '{glass.name}' to {swapped} host-building window pane(s).");
     }
 
     private static Transform? FindBuilding()
@@ -434,7 +581,7 @@ internal sealed class ArcadeWalkInService : IDisposable
     /// <summary>The game's transparent shop-window glass (render queue >= 3000), never the opaque fake.</summary>
     private static Material? FindTransparentGlass()
     {
-        Material? named = GameMaterialLibrary.Find("window_glass_material", "Glass", "glass");
+        Material? named = GameMaterialLibrary.Find("window_glass_material", "Glass", "glass", "window_glass");
         if (named != null && named.renderQueue >= 2450 && !named.name.Contains("opaque", StringComparison.OrdinalIgnoreCase))
             return named;
         try
@@ -455,6 +602,36 @@ internal sealed class ArcadeWalkInService : IDisposable
         return named;
     }
 
+
+    private static bool IsGlassDoorName(string name) =>
+        name.StartsWith("Basic Metal Glass Door", StringComparison.Ordinal)
+        || name.StartsWith("Metal Glass Door (Static)", StringComparison.Ordinal);
+
+    private static void ConsiderDoorLeaf(Transform? leaf, Transform owner, ref Transform? best, ref int bestScore, ref string sourceName, bool preferred)
+    {
+        if (leaf == null)
+            return;
+        MeshFilter? filter = leaf.GetComponent<MeshFilter>();
+        MeshRenderer? renderer = leaf.GetComponent<MeshRenderer>();
+        if (filter == null || filter.sharedMesh == null || renderer == null)
+            return;
+        if (renderer.isPartOfStaticBatch || filter.sharedMesh.name.StartsWith("Combined Mesh", StringComparison.Ordinal))
+            return;
+        string path = VanillaPropLibrary.PathOf(owner);
+        if (path.IndexOf("Arcade (1)", StringComparison.Ordinal) >= 0 && path.IndexOf("CornerDoor", StringComparison.Ordinal) >= 0)
+            return;
+        int score = preferred ? 2 : 1;
+        if (path.IndexOf("hardware", StringComparison.OrdinalIgnoreCase) >= 0) score += 4;
+        if (owner.gameObject.name.StartsWith("Basic Metal Glass Door", StringComparison.Ordinal)) score += 1;
+        Material? frame = renderer.sharedMaterial;
+        if (frame != null && frame.name.IndexOf("black", StringComparison.OrdinalIgnoreCase) >= 0) score += 2;
+        if (score > bestScore)
+        {
+            bestScore = score;
+            best = leaf;
+            sourceName = owner.gameObject.name + " (" + path + ")";
+        }
+    }
     /// <summary>
     /// The leaf ("Door" + handles + glass + collider) of a vanilla "Basic Metal Glass Door" PivotDoor:
     /// the same door model the Arcade's StaticDoor uses, but unbatched (it animates) and fitted with
@@ -469,27 +646,19 @@ internal sealed class ArcadeWalkInService : IDisposable
         {
             foreach (var pivot in UnityEngine.Object.FindObjectsOfType<Il2CppScheduleOne.Doors.PivotDoor>(true))
             {
-                if (pivot == null || !pivot.gameObject.name.StartsWith("Basic Metal Glass Door", StringComparison.Ordinal))
+                if (pivot == null || !IsGlassDoorName(pivot.gameObject.name))
                     continue;
                 Transform container = pivot.DoorTransform != null ? pivot.DoorTransform : pivot.transform;
-                Transform? leaf = container.Find("Door");
-                MeshFilter? filter = leaf != null ? leaf.GetComponent<MeshFilter>() : null;
-                MeshRenderer? renderer = leaf != null ? leaf.GetComponent<MeshRenderer>() : null;
-                if (leaf == null || filter == null || filter.sharedMesh == null || renderer == null)
+                ConsiderDoorLeaf(container.Find("Door") ?? container.Find("Model/Door"), pivot.transform, ref best, ref bestScore, ref sourceName, preferred: true);
+            }
+            // Also accept unbatched "Metal Glass Door (Static)" / "Basic Metal Glass Door" instances
+            // that are not PivotDoors (the arcade's own leaves are batched and will be skipped).
+            foreach (Transform root in Resources.FindObjectsOfTypeAll<Transform>())
+            {
+                if (root == null || !IsGlassDoorName(root.gameObject.name))
                     continue;
-                if (renderer.isPartOfStaticBatch || filter.sharedMesh.name.StartsWith("Combined Mesh", StringComparison.Ordinal))
-                    continue;
-                string path = pivot.transform.parent != null ? pivot.transform.parent.name : string.Empty;
-                int score = 1;
-                if (path.Contains("hardware", StringComparison.OrdinalIgnoreCase)) score += 4;
-                Material? frame = renderer.sharedMaterial;
-                if (frame != null && frame.name.Contains("black", StringComparison.OrdinalIgnoreCase)) score += 2;
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    best = leaf;
-                    sourceName = pivot.gameObject.name + (path.Length > 0 ? " (" + path + ")" : string.Empty);
-                }
+                Transform? leaf = root.Find("Door") ?? root.Find("Model/Door");
+                ConsiderDoorLeaf(leaf, root, ref best, ref bestScore, ref sourceName, preferred: false);
             }
         }
         catch (Exception ex)
@@ -569,7 +738,7 @@ internal sealed class ArcadeWalkInService : IDisposable
             thicknessAxis = (upAxis + 1) % 3;
         int widthAxis = 3 - thicknessAxis - upAxis;
 
-        Material frame = GameMaterialLibrary.Find("postoffice_blacktrim_mat", "gas station black mat") ?? MaterialFrom(model, "Door") ?? FallbackMaterial(new Color(0.03f, 0.03f, 0.035f, 1f));
+        Material frame = GameMaterialLibrary.Find("Doors Black", "postoffice_blacktrim_mat", "gas station black mat") ?? MaterialFrom(model, "Door") ?? FallbackMaterial(new Color(0.03f, 0.03f, 0.035f, 1f));
         Material glass = glassMaterial ?? FallbackMaterial(new Color(0.55f, 0.65f, 0.7f, 1f));
         Material handle = GameMaterialLibrary.Find("metal_mediumgrey_mat") ?? MaterialFrom(model, "DoorHandle") ?? frame;
 
@@ -639,7 +808,7 @@ internal sealed class ArcadeWalkInService : IDisposable
     /// </summary>
     private void BuildEntranceFrame(Vector3 doorCenter, Vector3 along, Vector3 inward, List<Leaf> leaves, float doorwayHeight)
     {
-        Material frame = GameMaterialLibrary.Find("WindowFrame", "Trim", "metal_mediumlightgrey_mat") ?? FallbackMaterial(new Color(0.86f, 0.85f, 0.80f, 1f));
+        Material frame = GameMaterialLibrary.Find("WindowFrame", "grocerystore_WindowFrame mat", "grocerystore_DoorFrame mat", "Trim", "metal_mediumlightgrey_mat") ?? FallbackMaterial(new Color(0.86f, 0.85f, 0.80f, 1f));
         var root = new GameObject("ARCADE_WALKIN_ENTRANCE_FRAME");
         _created.Add(root);
         root.transform.position = doorCenter;
@@ -669,7 +838,7 @@ internal sealed class ArcadeWalkInService : IDisposable
             mesh.RecalculateBounds();
             _created.Add(mesh);
             stop.AddComponent<MeshFilter>().sharedMesh = mesh;
-            stop.AddComponent<MeshRenderer>().sharedMaterial = GameMaterialLibrary.Find("postoffice_blacktrim_mat", "gas station black mat") ?? frame;
+            stop.AddComponent<MeshRenderer>().sharedMaterial = GameMaterialLibrary.Find("Doors Black", "postoffice_blacktrim_mat", "gas station black mat") ?? frame;
             leaves.Add(new Leaf(stop.transform, new Bounds(stop.transform.position, size), Array.Empty<Collider>(), leaves[0].Hinge));
         }
     }

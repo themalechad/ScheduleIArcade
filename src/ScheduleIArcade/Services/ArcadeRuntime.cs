@@ -94,6 +94,7 @@ internal sealed class ArcadeRuntime : IDisposable
     public void Tick()
     {
         _walkIn?.Tick();
+        _dressing?.Tick();
         _interaction?.Tick();
         _customAssets?.Tick();
         _buildSurfaces?.Tick();

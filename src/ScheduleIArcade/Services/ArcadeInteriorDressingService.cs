@@ -74,6 +74,8 @@ internal sealed class ArcadeInteriorDressingService : IDisposable
         if (trim != null) applied.Add("trim=" + trim.name);
         if (redNeon != null) applied.Add("neon=" + redNeon.name);
         int sconces = AddSconces(root);
+        try { PlaceVanillaFurniture(root); }
+        catch (Exception ex) { MelonLogger.Warning("Arcade furniture placement failed; the room stays unfurnished: " + ex.Message); }
         MelonLogger.Msg(applied.Count == 0
             ? "Arcade interior: no matching Schedule I materials are loaded; keeping the mod's own materials."
             : $"Arcade interior dressed with {count} surface(s) using live Schedule I materials ({string.Join(", ", applied)}); {sconces} wall sconce(s) reuse the Arcade building's light fixture meshes.");
@@ -144,8 +146,8 @@ internal sealed class ArcadeInteriorDressingService : IDisposable
         // Room-local wall mounting points (inner wall faces) and the inward normal of each wall.
         var mounts = new (Vector3 local, Vector3 inward)[]
         {
-            (new Vector3(0.75f, 2.05f, 3.98f), Vector3.back),
-            (new Vector3(2.45f, 2.05f, 3.98f), Vector3.back),
+            (new Vector3(0.30f, 2.30f, 3.98f), Vector3.back),
+            (new Vector3(2.20f, 2.30f, 3.98f), Vector3.back),
             (new Vector3(-0.75f, 2.05f, -3.93f), Vector3.forward),
             (new Vector3(1.95f, 2.05f, -3.93f), Vector3.forward),
         };
@@ -197,8 +199,173 @@ internal sealed class ArcadeInteriorDressingService : IDisposable
         return null;
     }
 
+    private readonly List<Transform> _fans = new();
+
+    /// <summary>Spins the reused ceiling-fan blades slowly.</summary>
+    public void Tick()
+    {
+        float step = 110f * Time.deltaTime;
+        foreach (Transform fan in _fans)
+            if (fan != null)
+                fan.Rotate(Vector3.up, step, Space.Self);
+    }
+
+    /// <summary>
+    /// Furnishes the floor plan (<see cref="ArcadeLayout.Furniture"/>) with visual-only copies of
+    /// Schedule I's own props found by exact name, each fitted (rotated/scaled down, never up) into
+    /// its reserved slot. Floor props get one simple box collider; wall/ceiling props none.
+    /// Every reused and every missing name is logged.
+    /// </summary>
+    private void PlaceVanillaFurniture(Transform room)
+    {
+        VanillaPropLibrary.Reset();
+        var reused = new List<string>();
+        var missing = new List<string>();
+        float counterTop = -1f;
+        foreach (LayoutSlot slot in ArcadeLayout.Furniture)
+        {
+            try
+            {
+                if (!VanillaPropLibrary.TryFind(slot.Candidates, out Transform? source, out List<MeshRenderer>? parts, out string matched) || source == null || parts == null)
+                {
+                    var counts = slot.Candidates.Select(n => n + " x" + VanillaPropLibrary.CountInstances(n));
+                    missing.Add(slot.Id + " [" + string.Join(", ", counts) + ": none unbatched/loaded]");
+                    continue;
+                }
+                if (slot.Kind == LayoutKind.OnTop && counterTop < 0f)
+                {
+                    missing.Add(slot.Id + " [no counter to stand on]");
+                    continue;
+                }
+
+                GameObject copy = VanillaPropLibrary.CopyVisual(source, parts, "Vanilla_" + slot.Id.Replace(' ', '_'));
+                _created.Add(copy);
+                copy.transform.SetParent(room, false);
+                Bounds b = FitIntoSlot(copy.transform, room, slot, counterTop);
+                if (slot.Kind == LayoutKind.Floor)
+                {
+                    AddPropCollider(room, slot, b);
+                    if (slot.Id == "prize counter")
+                        counterTop = b.max.y;
+                }
+                if (slot.Kind == LayoutKind.Ceiling)
+                {
+                    for (int i = 0; i < copy.transform.childCount; i++)
+                    {
+                        Transform child = copy.transform.GetChild(i);
+                        if (child.name == "Fan")
+                            _fans.Add(child);
+                    }
+                }
+                reused.Add(slot.Id + " <- " + matched + " (" + VanillaPropLibrary.PathOf(source) + "), " + b.size.x.ToString("0.00") + "x" + b.size.y.ToString("0.00") + "x" + b.size.z.ToString("0.00") + " m");
+            }
+            catch (Exception ex)
+            {
+                missing.Add(slot.Id + " [error: " + ex.Message + "]");
+            }
+        }
+        MelonLogger.Msg("Arcade furniture: reused " + reused.Count + " vanilla prop(s):\n  " + string.Join("\n  ", reused));
+        if (missing.Count > 0)
+            MelonLogger.Msg("Arcade furniture: not placed (" + missing.Count + "):\n  " + string.Join("\n  ", missing));
+    }
+
+    private static Bounds RoomBounds(Transform copy, Transform room)
+    {
+        bool any = false;
+        Bounds result = default;
+        foreach (Renderer renderer in copy.GetComponentsInChildren<Renderer>(true))
+        {
+            Bounds w = renderer.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = new(
+                    (i & 1) == 0 ? w.min.x : w.max.x,
+                    (i & 2) == 0 ? w.min.y : w.max.y,
+                    (i & 4) == 0 ? w.min.z : w.max.z);
+                Vector3 local = room.InverseTransformPoint(corner);
+                if (!any) { result = new Bounds(local, Vector3.zero); any = true; }
+                else result.Encapsulate(local);
+            }
+        }
+        return result;
+    }
+
+    private const float FloorTop = 0.043f;
+
+    /// <summary>Rotates, scales (down only) and moves a copy into its slot; returns its room-space bounds.</summary>
+    private static Bounds FitIntoSlot(Transform copy, Transform room, LayoutSlot slot, float counterTop)
+    {
+        copy.localPosition = Vector3.zero;
+        copy.localScale = Vector3.one;
+        copy.localRotation = Quaternion.Euler(0f, slot.Yaw, 0f);
+        Bounds b = RoomBounds(copy, room);
+        bool horizontalSlot = slot.Kind != LayoutKind.Wall;
+        if (horizontalSlot && Mathf.Abs(slot.SizeX - slot.SizeZ) > 0.05f && Mathf.Abs(b.size.x - b.size.z) > 0.05f
+            && (b.size.x > b.size.z) != (slot.SizeX > slot.SizeZ))
+        {
+            copy.localRotation = Quaternion.Euler(0f, slot.Yaw + 90f, 0f);
+            b = RoomBounds(copy, room);
+        }
+
+        float scale;
+        if (slot.Kind == LayoutKind.Wall)
+        {
+            float along = slot.SizeX > slot.SizeZ ? b.size.x : b.size.z;
+            float span = Mathf.Max(slot.SizeX, slot.SizeZ);
+            scale = Mathf.Min(1f, span / Mathf.Max(0.01f, along), 0.9f / Mathf.Max(0.01f, b.size.y));
+        }
+        else
+        {
+            scale = Mathf.Min(1f, slot.SizeX / Mathf.Max(0.01f, b.size.x), slot.SizeZ / Mathf.Max(0.01f, b.size.z), slot.MaxHeight / Mathf.Max(0.01f, b.size.y));
+        }
+        copy.localScale = Vector3.one * scale;
+        b = RoomBounds(copy, room);
+
+        Vector3 move;
+        switch (slot.Kind)
+        {
+            case LayoutKind.Floor:
+                move = new Vector3(slot.X - b.center.x, FloorTop - b.min.y, slot.Z - b.center.z);
+                break;
+            case LayoutKind.OnTop:
+                move = new Vector3(slot.X - b.center.x, counterTop - b.min.y, slot.Z - b.center.z);
+                break;
+            case LayoutKind.Ceiling:
+                move = new Vector3(slot.X - b.center.x, ArcadeDimensions.InteriorCeilingHeight - 0.005f - b.max.y, slot.Z - b.center.z);
+                break;
+            default:
+                // Wall: back flush against the wall face, centred at the mount height (MaxHeight).
+                if (Mathf.Abs(slot.Z - ArcadeLayout.InnerNorth) < 0.01f)
+                    move = new Vector3(slot.X - b.center.x, slot.MaxHeight - b.center.y, ArcadeLayout.InnerNorth - 0.01f - b.max.z);
+                else if (Mathf.Abs(slot.Z - ArcadeLayout.InnerSouth) < 0.01f)
+                    move = new Vector3(slot.X - b.center.x, slot.MaxHeight - b.center.y, ArcadeLayout.InnerSouth + 0.01f - b.min.z);
+                else if (Mathf.Abs(slot.X - ArcadeLayout.InnerEast) < 0.01f)
+                    move = new Vector3(ArcadeLayout.InnerEast - 0.01f - b.max.x, slot.MaxHeight - b.center.y, slot.Z - b.center.z);
+                else
+                    move = new Vector3(ArcadeLayout.InnerWest + 0.01f - b.min.x, slot.MaxHeight - b.center.y, slot.Z - b.center.z);
+                break;
+        }
+        copy.localPosition = move;
+        return RoomBounds(copy, room);
+    }
+
+    /// <summary>One axis-aligned box from the floor, clamped to the slot footprint.</summary>
+    private void AddPropCollider(Transform room, LayoutSlot slot, Bounds b)
+    {
+        var go = new GameObject("ARCADE_COLLIDER_PROP_" + slot.Id.Replace(' ', '_'));
+        _created.Add(go);
+        go.transform.SetParent(room, false);
+        float minX = Mathf.Max(b.min.x, slot.MinX), maxX = Mathf.Min(b.max.x, slot.MaxX);
+        float minZ = Mathf.Max(b.min.z, slot.MinZ), maxZ = Mathf.Min(b.max.z, slot.MaxZ);
+        float height = Mathf.Clamp(b.max.y - FloorTop, 0.3f, 1.6f);
+        var box = go.AddComponent<BoxCollider>();
+        box.center = new Vector3((minX + maxX) * 0.5f, FloorTop + height * 0.5f, (minZ + maxZ) * 0.5f);
+        box.size = new Vector3(Mathf.Max(0.1f, maxX - minX), height, Mathf.Max(0.1f, maxZ - minZ));
+    }
+
     public void Dispose()
     {
+        _fans.Clear();
         foreach (UnityEngine.Object created in _created)
         {
             if (created != null)

@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text;
 using System.Text.RegularExpressions;
+using ScheduleIArcade.Utils;
 
 /// <summary>
 /// 0.4.1 room checks: raised ceiling stays inside the Arcade building shell, one flat floor
@@ -64,64 +65,119 @@ internal static class RoomChecks
         Console.WriteLine($"  vestibule ramp meets the single floor slab (top {floorTop:0.000}) with a {lip:0.0} mm step; slab edge = door line");
         if (MathF.Abs(lip) > 5f) { failures++; Console.WriteLine("  FAIL lip between ramp and floor"); }
 
-        // --- Cabinet colliders and walkways --------------------------------------------------------
+        // --- 0.4.1 floor plan (ArcadeLayout, shared with the mod) -----------------------------------
         var props = ReadProps(Path.Combine(repo, "dist", "Mods", "ScheduleIArcade", "Assets", "RawScene", "arcade_runtime_meshes.bin"));
-        var boxes = new List<(string name, Vector2[] poly)>();
-        void AddBox(string name, Vector2 centre, float yawDeg, Vector2 localCentre, Vector2 size)
-        {
-            float r = yawDeg * MathF.PI / 180f;
-            // Unity yaw: local (x, z) -> world (x cos + z sin, -x sin + z cos).
-            Vector2 Rot(Vector2 v) => new(v.X * MathF.Cos(r) + v.Y * MathF.Sin(r), -v.X * MathF.Sin(r) + v.Y * MathF.Cos(r));
-            var pts = new[] { new Vector2(-0.5f, -0.5f), new Vector2(0.5f, -0.5f), new Vector2(0.5f, 0.5f), new Vector2(-0.5f, 0.5f) }
-                .Select(c => centre + Rot(localCentre + c * size)).ToArray();
-            boxes.Add((name, pts));
-        }
-        foreach (var p in props)
-        {
-            Vector2 pos = new(p.pos.X, p.pos.Z);
-            if (p.name == "Table Top") pos.X = -0.27f;
-            if (p.name == "Air Hockey") pos.X = 1.67f;
-            Vector2 bc = new((p.min.X + p.max.X) * 0.5f, (p.min.Z + p.max.Z) * 0.5f);
-            Vector2 bs = new(p.max.X - p.min.X, p.max.Z - p.min.Z);
-            if (p.name.StartsWith("Pinball Machine")) AddBox(p.name, pos, p.yaw, bc, bs - new Vector2(0.08f, 0.08f));
-            else if (p.name == "Table Top")
-            {
-                AddBox("Pac-Man table", pos, p.yaw, new Vector2(-0.05f, 0f), new Vector2(1.42f, 0.92f));
-                AddBox("Pac-Man stool A", pos, p.yaw, new Vector2(-1.05f, 0f), new Vector2(0.30f, 0.30f));
-                AddBox("Pac-Man stool B", pos, p.yaw, new Vector2(1.05f, 0f), new Vector2(0.30f, 0.30f));
-            }
-            else if (p.name == "Air Hockey") AddBox("Air hockey", pos, p.yaw, Vector2.Zero, new Vector2(0.90f, 1.80f));
-            else if (p.name.StartsWith("Arcade Machine")) AddBox(p.name, pos, p.yaw, bc, bs - new Vector2(0.12f, 0.12f));
-            // Crane Game / Vending Machine are hidden and have no collider.
-        }
-        AddBox("Arcade TV", new Vector2(1.32f, 3.70f), 0f, new Vector2(0f, 0.01f), new Vector2(1.46f, 0.62f));
-        float westInner = FX(-2.67f) + 0.18f * FXs * 0.5f, eastInner = FX(2.64f) - 0.16f * FXs * 0.5f;
-        float southInner = FZ(-3.02f) + 0.16f * FZs * 0.5f, northInner = FZ(3.06f) - 0.18f * FZs * 0.5f;
-        boxes.Add(("west wall", new[] { new Vector2(westInner - 0.2f, southInner), new Vector2(westInner, southInner), new Vector2(westInner, FZ(1.56f)), new Vector2(westInner - 0.2f, FZ(1.56f)) }));
-        boxes.Add(("east wall", new[] { new Vector2(eastInner, southInner), new Vector2(eastInner + 0.2f, southInner), new Vector2(eastInner + 0.2f, northInner), new Vector2(eastInner, northInner) }));
+        var floor = new List<(string name, float minX, float maxX, float minZ, float maxZ, char glyph)>();
+        static char GlyphFor(string id) => id.StartsWith("Pinball") ? 'P' : id.StartsWith("Arcade Machine") ? 'D' : id == "Table Top" ? 'T'
+            : id.StartsWith("Pac-Man stool") ? 's' : id == "Air Hockey" ? 'H' : id == "Arcade TV" ? 'V' : id.Contains("counter") ? 'C'
+            : id.Contains("shelf") ? 'S' : id.Contains("fridge") ? 'F' : id.Contains("chair") ? 'h' : id.Contains("bin") ? 'b' : id.Contains("plant") ? 'p' : '?';
+        foreach (LayoutSlot slot in ArcadeLayout.Machines.Concat(ArcadeLayout.TableStools).Append(ArcadeLayout.Tv).Concat(ArcadeLayout.Furniture.Where(f => f.Kind == LayoutKind.Floor)))
+            floor.Add((slot.Id, slot.MinX, slot.MaxX, slot.MinZ, slot.MaxZ, GlyphFor(slot.Id)));
 
-        float Gap(string a, string b) => PolyDistance(boxes.First(x => x.name == a).poly, boxes.First(x => x.name == b).poly);
-        var aisles = new (string a, string b)[]
+        // Machine slots must contain the real model footprint (packaged mesh bounds turned by the slot yaw).
+        foreach (LayoutSlot slot in ArcadeLayout.Machines)
         {
-            ("Pac-Man table", "Air hockey"),
-            ("Air hockey", "east wall"),
-            ("Pac-Man table", "Pinball Machine 01"),
-            ("Pac-Man table", "Pinball Machine 02"),
-        };
-        foreach (var (a, b) in aisles)
+            var p = props.FirstOrDefault(x => x.name == slot.Id);
+            if (p.name == null) { failures++; Console.WriteLine($"  FAIL {slot.Id} not in the mesh package"); continue; }
+            float r = slot.Yaw * MathF.PI / 180f;
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+            Vector2 body = slot.Id == "Table Top" ? new Vector2(0.75f, 0.50f) : slot.Id == "Air Hockey" ? new Vector2(0.47f, 0.92f) : new Vector2(float.NaN, 0);
+            for (int i = 0; i < 4; i++)
+            {
+                float lx = float.IsNaN(body.X) ? ((i & 1) == 0 ? p.min.X : p.max.X) : ((i & 1) == 0 ? -body.X : body.X) - (slot.Id == "Table Top" ? 0.05f : 0f);
+                float lz = float.IsNaN(body.X) ? ((i & 2) == 0 ? p.min.Z : p.max.Z) : ((i & 2) == 0 ? -body.Y : body.Y);
+                float wx = slot.X + lx * MathF.Cos(r) + lz * MathF.Sin(r), wz = slot.Z - lx * MathF.Sin(r) + lz * MathF.Cos(r);
+                minX = MathF.Min(minX, wx); maxX = MathF.Max(maxX, wx); minZ = MathF.Min(minZ, wz); maxZ = MathF.Max(maxZ, wz);
+            }
+            bool fits = minX >= slot.MinX - 0.08f && maxX <= slot.MaxX + 0.08f && minZ >= slot.MinZ - 0.08f && maxZ <= slot.MaxZ + 0.08f;
+            Console.WriteLine($"  {slot.Id,-20} model x {minX:0.00}..{maxX:0.00} z {minZ:0.00}..{maxZ:0.00} (collider slot x {slot.MinX:0.00}..{slot.MaxX:0.00} z {slot.MinZ:0.00}..{slot.MaxZ:0.00}){(fits ? "" : "  <-- model exceeds slot")}");
+            if (!fits) { failures++; Console.WriteLine("  FAIL machine model larger than its collider slot"); }
+            // Model must be inside the room (walls are 2 cm tolerance: cabinets stand against them).
+            if (minX < ArcadeLayout.InnerWest - 0.02f || maxX > ArcadeLayout.InnerEast + 0.02f || minZ < ArcadeLayout.InnerSouth - 0.02f || maxZ > ArcadeLayout.InnerNorth + 0.02f)
+            { failures++; Console.WriteLine($"  FAIL {slot.Id} model pokes through a wall"); }
+        }
+
+        // Every floor footprint inside the room (rectangle + chamfer half-plane) and no overlaps.
+        var (dx, dz, nx, nz) = ArcadeLayout.Doorway();
+        float chamferHalfThickness = 0.18f * FXs * 0.5f;
+        bool InsideRoom(float x, float z)
+        {
+            if (x < ArcadeLayout.InnerWest - 0.02f || x > ArcadeLayout.InnerEast + 0.02f || z < ArcadeLayout.InnerSouth - 0.02f || z > ArcadeLayout.InnerNorth + 0.07f)
+                return false;
+            return (x - ArcadeLayout.ChamferAX) * nx + (z - ArcadeLayout.ChamferAZ) * nz >= chamferHalfThickness - 0.02f;
+        }
+        foreach (var f in floor)
+        {
+            bool ok = InsideRoom(f.minX, f.minZ) && InsideRoom(f.minX, f.maxZ) && InsideRoom(f.maxX, f.minZ) && InsideRoom(f.maxX, f.maxZ);
+            if (!ok) { failures++; Console.WriteLine($"  FAIL {f.name} footprint leaves the room"); }
+        }
+        for (int i = 0; i < floor.Count; i++)
+            for (int j = i + 1; j < floor.Count; j++)
+            {
+                var a = floor[i]; var b = floor[j];
+                bool overlap = a.minX < b.maxX - 0.005f && b.minX < a.maxX - 0.005f && a.minZ < b.maxZ - 0.005f && b.minZ < a.maxZ - 0.005f;
+                bool tableAndStool = (a.name == "Table Top" && b.name.StartsWith("Pac-Man stool")) || (b.name == "Table Top" && a.name.StartsWith("Pac-Man stool"));
+                if (overlap && !tableAndStool) { failures++; Console.WriteLine($"  FAIL {a.name} overlaps {b.name}"); }
+            }
+        Console.WriteLine($"  floor items: {floor.Count} footprints inside the room, no overlaps");
+
+        // Main aisles >= 1.0 m.
+        float Gap(string a, string b)
+        {
+            var A = floor.First(x => x.name == a);
+            if (b == "east wall") return ArcadeLayout.InnerEast - A.maxX;
+            var B = floor.First(x => x.name == b);
+            float gx = MathF.Max(0f, MathF.Max(A.minX - B.maxX, B.minX - A.maxX));
+            float gz = MathF.Max(0f, MathF.Max(A.minZ - B.maxZ, B.minZ - A.maxZ));
+            return MathF.Sqrt(gx * gx + gz * gz);
+        }
+        foreach (var (a, b) in ArcadeLayout.Aisles)
         {
             float g = Gap(a, b);
             Console.WriteLine($"  walkway {a} <-> {b}: {g:0.00} m");
             if (g < 1.0f - 1e-3f) { failures++; Console.WriteLine("  FAIL walkway narrower than 1.0 m"); }
         }
-        // Report any other pair closer than 1 m (side-by-side machines are expected).
-        for (int i = 0; i < boxes.Count; i++)
-            for (int j = i + 1; j < boxes.Count; j++)
+
+        // Doorway: a 1.2 m wide, 2.0 m deep corridor straight in from the room door is clear.
+        int blocked = 0;
+        for (float s = 0f; s <= 2.0f; s += 0.05f)
+            for (float w = -0.6f; w <= 0.6f; w += 0.05f)
             {
-                float g = PolyDistance(boxes[i].poly, boxes[j].poly);
-                if (g < 1.0f && !aisles.Any(x => (x.a == boxes[i].name && x.b == boxes[j].name)))
-                    Console.WriteLine($"    (info) {boxes[i].name} <-> {boxes[j].name}: {g:0.00} m {(g <= 0f ? "touching/back-to-back" : "")}");
+                float x = dx + nx * s + (-nz) * w, z = dz + nz * s + nx * w;
+                foreach (var f in floor)
+                    if (x > f.minX && x < f.maxX && z > f.minZ && z < f.maxZ) { blocked++; Console.WriteLine($"  FAIL doorway corridor blocked by {f.name}"); goto next; }
+                next:;
             }
+        if (blocked > 0) failures++;
+        Console.WriteLine($"  doorway corridor (1.2 m x 2.0 m inward from the room door at ({dx:0.00},{dz:0.00})): {(blocked == 0 ? "clear" : "BLOCKED")}");
+
+        // Wall / ceiling props stay on their walls and under the ceiling.
+        foreach (LayoutSlot slot in ArcadeLayout.Furniture.Where(f => f.Kind is LayoutKind.Wall or LayoutKind.Ceiling))
+        {
+            bool ok = slot.Kind == LayoutKind.Ceiling
+                ? slot.MinX >= ArcadeLayout.InnerWest && slot.MaxX <= ArcadeLayout.InnerEast && slot.MinZ >= ArcadeLayout.InnerSouth && slot.MaxZ <= ArcadeLayout.InnerNorth && slot.MaxHeight < ceilingH - floorTop - 2.0f
+                : slot.MaxHeight + 0.45f < ceilingH && (MathF.Abs(slot.Z - ArcadeLayout.InnerNorth) < 0.01f || MathF.Abs(slot.X - ArcadeLayout.InnerEast) < 0.01f || MathF.Abs(slot.Z - ArcadeLayout.InnerSouth) < 0.01f || MathF.Abs(slot.X - ArcadeLayout.InnerWest) < 0.01f);
+            if (!ok) { failures++; Console.WriteLine($"  FAIL {slot.Id} slot is off its wall/ceiling"); }
+        }
+
+        // Top-down sketch, 0.25 m cells. North (+Z, TV wall) at the top, west (-X, pinball wall) left.
+        Console.WriteLine("  Floor plan (north up, 0.25 m cells): P pinball, D Doom upright, T Pac-Man table, s stool, H air hockey,");
+        Console.WriteLine("  V TV, C prize counter, S prize shelf, F fridge/jukebox, h chair, b bin, p plant, / entrance chamfer, * door");
+        for (float z = ArcadeLayout.InnerNorth - 0.125f; z > ArcadeLayout.InnerSouth; z -= 0.25f)
+        {
+            var line = new StringBuilder("  |");
+            for (float x = ArcadeLayout.InnerWest + 0.125f; x < ArcadeLayout.InnerEast; x += 0.25f)
+            {
+                char c = '.';
+                float side = (x - ArcadeLayout.ChamferAX) * nx + (z - ArcadeLayout.ChamferAZ) * nz;
+                if (side < 0f) c = ' ';
+                else if (side < 0.25f) c = MathF.Abs((x - dx) * (-nz) + (z - dz) * nx) < 0.95f ? '*' : '/';
+                foreach (var f in floor)
+                    if (x > f.minX && x < f.maxX && z > f.minZ && z < f.maxZ) { c = f.glyph; break; }
+                line.Append(c);
+            }
+            Console.WriteLine(line.Append('|').ToString());
+        }
         return failures;
     }
 

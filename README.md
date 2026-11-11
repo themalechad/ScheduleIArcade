@@ -142,6 +142,10 @@ penetration and machine overlaps and can snap flush to the arcade's straight wal
 - Pac-Man: native 224x288 screen fitted inside the table bezel and oriented to the player's end; side logos un-mirrored; arcade ghost AI (scatter/chase waves, per-ghost targeting, frightened, eyes, house release, Cruise Elroy).
 - Pinball: screen inset inside the rails and above the apron, baked 3D flippers hidden, working STAR GATE (capture, extra ball, 25,000 bonus, once per ball).
 - Air hockey: playable local two-player match.
+- Floor plan rework inside the host Northtown Arcade building (`Map/Hyland Point/Region_Northtown/Arcade (1)`): all four pinballs in one west-wall bank, Doom uprights together on the south wall, Pac-Man cocktail table and air hockey in the open floor, Arcade TV on the north wall. Walkways stay at least 1.0 m; the doorway corridor stays clear. Ceiling remains 3.40 m.
+- Furniture is cloned at runtime from the game's own loaded props (visual-only copies: prize counter and register, shelf, fridge or vending machine, chairs, bins, plant, wall clock, sign, ceiling fans, fluorescent lights). Exact scene names are tried in order and every reused or missing asset is logged. No ripped assets are packaged.
+- Host Arcade storefront: the building's fake-interior boxes stay hidden; window panes on WindowWall / CornerWindowWall / UpperWindowWall use the game's transparent shop-window glass so you can see into the arcade from the street. Stray vanilla leftovers that poke into the interior (including the side Industrial Metal Door, pipes, and leftover chairs or stools) are hidden only inside the room bounds.
+- This fork's 0.4.1 package: https://github.com/themalechad/ScheduleIArcade/releases/tag/v0.4.1-doom-audio
 
 ## Installation
 

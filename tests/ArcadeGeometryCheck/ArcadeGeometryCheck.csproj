@@ -12,6 +12,9 @@
     <ScheduleIGameDir Condition="'$(ScheduleIGameDir)' == ''">D:\SteamLibrary\steamapps\common\Schedule I</ScheduleIGameDir>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\ArcadeLayout.cs" Link="Shared\ArcadeLayout.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="AssetsTools.NET"><HintPath>$(ScheduleIGameDir)\MelonLoader\net6\AssetsTools.NET.dll</HintPath></Reference>
   </ItemGroup>
 </Project>
