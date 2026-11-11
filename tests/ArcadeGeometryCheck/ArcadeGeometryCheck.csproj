@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\src\ScheduleIArcade\Utils\ArcadeLayout.cs" Link="Shared\ArcadeLayout.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\ArcadeDimensions.cs" Link="Shared\ArcadeDimensions.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="AssetsTools.NET"><HintPath>$(ScheduleIGameDir)\MelonLoader\net6\AssetsTools.NET.dll</HintPath></Reference>

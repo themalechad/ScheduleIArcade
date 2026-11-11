@@ -3,7 +3,7 @@ namespace ScheduleIArcade.Utils;
 internal static class Constants
 {
     public const string ModName = "Schedule I Arcade";
-    public const string ModVersion = "0.5.0";
+    public const string ModVersion = "0.6.0";
     public const string ModAuthor = "GrandmasAnkles/XUnfairX";
     public const string PreferencesCategory = "ScheduleIArcade";
 
@@ -16,9 +16,6 @@ internal static class Constants
     public const string ScreenPrefix = "ARCADE_SCREEN_";
     public const string SpawnMarkerName = "ARCADE_SPAWN";
     public const string ExitMarkerName = "ARCADE_EXIT";
-    public const string RoomDoorRootName = "ARCADE_DOUBLE_DOOR_CHAMFER";
-    public const string RoomDoorHingeA = "ARCADE_DOOR_HINGE_A";
-    public const string RoomDoorHingeB = "ARCADE_DOOR_HINGE_B";
 
     // A close, deliberate look is required before an arcade interaction prompt is shown.
     public const float InteractionDistance = 2.35f;

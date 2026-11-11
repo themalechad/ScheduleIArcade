@@ -19,15 +19,26 @@ namespace ScheduleIArcade.Services;
 /// </summary>
 internal sealed class ArcadeBuildSurfaceService : IDisposable
 {
-    private static readonly string[] ArcadeWallColliderNames =
+    // 0.6.0: the full-height solid wall pieces of the interior lining (ArcadeShellBuilder names them
+    // ARCADE_SHELL_WALL_<wall id>_<n>); window/door-adjacent pieces are skipped by the size filter below.
+    private string[] ArcadeWallColliderNames
     {
-        "RawArcade_Collision_South",
-        "RawArcade_Collision_East",
-        "RawArcade_Wall_West_Lower",
-        "RawArcade_Wall_Chamfer_BeforeDoor",
-        "RawArcade_Wall_Chamfer_AfterDoor",
-        "RawArcade_Wall_North_Full"
-    };
+        get
+        {
+            var names = new List<string>();
+            if (_location.RoomInstance == null)
+                return names.ToArray();
+            Transform room = _location.RoomInstance.transform;
+            for (int i = 0; i < room.childCount; i++)
+            {
+                string n = room.GetChild(i).name;
+                if (n.StartsWith(ArcadeShellBuilder.WallPrefix, StringComparison.Ordinal) && !n.Contains("_below_") && !n.Contains("_above_"))
+                    names.Add(n);
+            }
+            return names.ToArray();
+        }
+    }
+
 
     // Top of the visible checkerboard floor is ~0.043 in raw-scene local coordinates.
     // Keep the vanilla placement tiles just above it so BuildUpdate_Grid's tile ray/detection
@@ -315,16 +326,17 @@ internal sealed class ArcadeBuildSurfaceService : IDisposable
             int buildLayer = template.gameObject.layer;
 
             int registered = 0;
-            for (int i = 0; i < ArcadeWallColliderNames.Length; i++)
+            string[] wallNames = ArcadeWallColliderNames;
+            for (int i = 0; i < wallNames.Length; i++)
             {
-                Transform? wall = FindDeepChild(_location.RoomInstance.transform, ArcadeWallColliderNames[i]);
+                Transform? wall = FindDeepChild(_location.RoomInstance.transform, wallNames[i]);
                 if (wall == null)
                     continue;
 
                 // Surface.Awake parses BakedGUID immediately. Adding Surface to an ACTIVE object
                 // caused the FormatException seen in M2.26 because BakedGUID was still empty. Build
                 // each proxy inactive, set its GUID/property first, then activate it.
-                var proxy = new GameObject("ARCADE_BUILD_SURFACE_" + ArcadeWallColliderNames[i]);
+                var proxy = new GameObject("ARCADE_BUILD_SURFACE_" + wallNames[i]);
                 proxy.SetActive(false);
                 proxy.layer = buildLayer;
                 proxy.transform.SetParent(propertyTransform, false);

@@ -1,20 +1,24 @@
-// Walk-in entrance geometry check against the installed game's level1 (read-only).
+// 0.6.0 geometry check against the installed game's level1 (read-only).
 //
 //   dotnet run -c Release -- "D:\SteamLibrary\steamapps\common\Schedule I"
 //
 // 1. Parses Map/Hyland Point/Region_Northtown/Arcade (1) from level1 (Unity 2022.3 binary layout,
-//    no type trees) and collects every solid BoxCollider near the building.
-// 2. Builds the arcade room's generated walls from the same constants RawArcadeSceneService uses.
-// 3. Applies the ArcadeWalkInService changes (corner-door seal -> stubs + lintel, glass leaves
-//    swung out, vestibule walls, room leaves swung in) using the same formulas.
-// 4. Runs a grid search for a standing player capsule from the street to inside the room for the
-//    vanilla building and for the walk-in building.
+//    no type trees) and re-measures the building (outer wall colliders, foundation, first floor, roof,
+//    corner door and its glass leaves).
+// 2. Builds the arcade shell exactly as the mod does (ArcadeLayout.WallPieces / OuterOutline) and the
+//    walk-in changes (corner-door seal -> stubs + lintel, cloned leaves swinging away from the player).
+// 3. Checks: the interior fills the building (flush within the wall thickness, no walkable cavity, no
+//    leftover rooms), single ground floor, closed opaque shell, ONE door set, no vestibule, level
+//    threshold, nothing in the door swing, 1.0 m walkways from the door to every machine, doorway clear,
+//    ceiling inside the roof; and that the game's own baked NPC navmesh reaches the door so the
+//    runtime door link has something to connect to (RoomChecks.cs).
 using System.Numerics;
 using System.Text;
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
+using ScheduleIArcade.Utils;
 
-string gameDir = args.Length > 0 ? args[0] : @"D:\SteamLibrary\steamapps\common\Schedule I";
+string gameDir = args.Length > 0 && !args[0].StartsWith("--") ? args[0] : @"D:\SteamLibrary\steamapps\common\Schedule I";
 string level1 = Path.Combine(gameDir, "Schedule I_Data", "level1");
 if (!File.Exists(level1))
 {
@@ -23,6 +27,7 @@ if (!File.Exists(level1))
 }
 
 int failures = 0;
+void Fail(string message) { failures++; Console.WriteLine("  FAIL " + message); }
 var scene = Scene.Load(level1);
 long buildingGo = scene.FindByPath("Map/Hyland Point/Region_Northtown/Arcade (1)");
 if (buildingGo == 0)
@@ -30,94 +35,45 @@ if (buildingGo == 0)
     Console.WriteLine("FAIL Arcade (1) not found in level1");
     return 1;
 }
+if (args.Contains("--dump")) { scene.Dump(scene.TransformOf(buildingGo), 0); return 0; }
 long cornerDoor = scene.FindChild(buildingGo, "arcade/CornerDoor");
 Console.WriteLine($"Arcade (1) at {V(scene.World(scene.TransformOf(buildingGo)).Translation)}; CornerDoor found={cornerDoor != 0}");
 
-const float foot = -3.90f;     // Foundation top (measured)
+// ---- Room placement (ArcadeLayout, shared with the mod) ------------------------------------------
+var roomOrigin = new Vector3(ArcadeLayout.WorldOriginX, ArcadeLayout.WorldOriginY, ArcadeLayout.WorldOriginZ);
+var roomRot = Quaternion.CreateFromAxisAngle(Vector3.UnitY, ArcadeLayout.RoomYaw * MathF.PI / 180f);
+Vector3 RoomToWorld(Vector3 local) => roomOrigin + Vector3.Transform(local, roomRot);
+Box RoomBox(string name, Vector3 localCenter, Vector3 size, Quaternion localRot)
+    => Box.Oriented(name, RoomToWorld(localCenter), roomRot * localRot, size);
+
+const float foot = ArcadeLayout.FloorWorldY;
 const float bandMin = foot + 0.25f, bandMax = foot + 1.85f; // standing capsule body above step height
-var buildingBoxes = scene.SolidBoxesNear(new Vector3(-48f, 0f, 141.5f), 22f)
-    .Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
+var nearBoxes = scene.SolidBoxesNear(new Vector3(-48f, 0f, 141.5f), 22f).ToList();
+var buildingBoxes = nearBoxes.Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
 Console.WriteLine($"Solid box colliders near the Arcade intersecting the player band: {buildingBoxes.Count}");
 
-// --- Room (RawArcadeSceneService constants) --------------------------------------------------
-const float FXs = 1.22f, FZs = 1.34f;
-// Must match ScheduleIArcade.Utils.ArcadeDimensions (verified against the source in RoomChecks).
-const float CeilingH = 3.40f, WallH = 3.48f, FloorTop = 0.043f;
-static float FX(float x) => x * 1.22f;
-static float FZ(float z) => z * 1.34f;
-var roomOrigin = new Vector3(-48.4f, -3.8f, 141.4f);
-var roomRot = Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI); // yaw 180
-Vector3 RoomToWorld(Vector3 local) => roomOrigin + Vector3.Transform(local, roomRot);
-Box RoomBox(string name, Vector3 localCenter, Vector3 size, float yawDeg = 0f)
-{
-    // Same numeric quaternion convention as Unity (Hamilton product, q v q*): world = parent * local.
-    var rot = roomRot * Quaternion.CreateFromAxisAngle(Vector3.UnitY, yawDeg * MathF.PI / 180f);
-    return Box.Oriented(name, RoomToWorld(localCenter), rot, size);
-}
-Box Segment(string name, Vector3 a, Vector3 b, float height, float thickness, float extra)
-{
-    Vector3 d = b - a;
-    float length = MathF.Sqrt(d.X * d.X + d.Z * d.Z);
-    float yaw = MathF.Atan2(d.X, d.Z) * 180f / MathF.PI;
-    return RoomBox(name, (a + b) * 0.5f + new Vector3(0, height * 0.5f, 0), new Vector3(thickness, height, length + extra), yaw);
-}
-
-var chamferA = new Vector3(FX(-2.67f), 0, FZ(1.56f));
-var chamferB = new Vector3(FX(-0.84f), 0, FZ(3.06f));
-Vector3 tangent = Vector3.Normalize(chamferB - chamferA);
-Vector3 roomInwardLocal = new(tangent.Z, 0, -tangent.X);
-const float doorT = 0.53f, doorWidth = 1.90f, doorHeight = 2.18f;
-Vector3 doorCenterLocal = Vector3.Lerp(chamferA, chamferB, doorT);
-Vector3 doorStart = doorCenterLocal - tangent * (doorWidth * 0.5f);
-Vector3 doorEnd = doorCenterLocal + tangent * (doorWidth * 0.5f);
-var roomBoxes = new List<Box>
-{
-    RoomBox("room west wall", new Vector3(FX(-2.67f), WallH * 0.5f, FZ(-0.72f)), new Vector3(0.18f * FXs, WallH, 4.72f * FZs)),
-    Segment("room chamfer before door", chamferA, doorStart, WallH, 0.18f * FXs, 0.12f),
-    Segment("room chamfer after door", doorEnd, chamferB, WallH, 0.18f * FXs, 0.12f),
-    RoomBox("room north wall", new Vector3((FX(-0.84f) + FX(2.67f)) * 0.5f, WallH * 0.5f, FZ(3.06f)), new Vector3(FX(2.67f) - FX(-0.84f), WallH, 0.18f * FZs)),
-    RoomBox("room south shell", new Vector3(0, WallH * 0.5f, FZ(-3.02f)), new Vector3(5.34f * FXs, WallH, 0.16f * FZs)),
-    RoomBox("room east shell", new Vector3(FX(2.64f), WallH * 0.5f, 0), new Vector3(0.16f * FXs, WallH, 6.12f * FZs)),
-};
-Vector3 roomDoorCenter = RoomToWorld(doorCenterLocal);
-Vector3 roomInward = Flat(Vector3.Transform(roomInwardLocal, roomRot));
-Box RoomLeaf(string name, Vector3 hingeLocal, Vector3 towardCenterLocal, bool open, bool intoRoom = false)
-{
-    Vector3 dirLocal = open ? (intoRoom ? roomInwardLocal : -roomInwardLocal) : towardCenterLocal; // open leaves swing away from the player
-    Vector3 a = hingeLocal, b = hingeLocal + dirLocal * (doorWidth * 0.5f);
-    return Segment(name, a, b, doorHeight, 0.09f, 0f);
-}
-
-// --- Building door measurements ---------------------------------------------------------------
+// ---- Building door measurements -----------------------------------------------------------------
 var leaves = scene.SolidBoxesUnder(cornerDoor).Where(b => b.Path.Contains("Glass Door")).ToList();
 var seal = scene.SolidBoxesUnder(cornerDoor).First(b => b.Path.EndsWith("arcade/CornerDoor"));
 var doorway = Aabb.Of(leaves.SelectMany(l => l.Corners()));
 Vector3 buildingDoorCenter = new(doorway.Center.X, doorway.Min.Y, doorway.Center.Z);
 Vector3 along = seal.HorizontalLongAxis();
-Vector3 inward = Flat(roomDoorCenter - buildingDoorCenter);
+Vector3 buildingCentre = scene.World(scene.TransformOf(buildingGo)).Translation;
+Vector3 inward = Flat(buildingCentre - buildingDoorCenter);
 inward = Vector3.Normalize(Flat(inward - along * Vector3.Dot(inward, along)));
-float depth = Vector3.Dot(roomDoorCenter - buildingDoorCenter, inward);
 float doorwayHalf = doorway.HalfExtentAlong(along, buildingDoorCenter);
 float doorwayHeight = doorway.Max.Y - doorway.Min.Y;
-Console.WriteLine($"Building glass doorway centre {V(buildingDoorCenter)} clear width {doorwayHalf * 2:0.00} m height {doorwayHeight:0.00} m");
-Console.WriteLine($"Room chamfer door centre {V(roomDoorCenter)}; vestibule depth {depth:0.00} m; tangential offset {Vector3.Dot(roomDoorCenter - buildingDoorCenter, along):0.00} m");
+Console.WriteLine($"Building glass doorway centre {V(buildingDoorCenter)} clear width {doorwayHalf * 2:0.00} m height {doorwayHeight:0.00} m, inward {V(inward)}");
+{
+    Vector3 layoutDoor = RoomToWorld(new Vector3(ArcadeLayout.DoorX, ArcadeLayout.FloorTop, ArcadeLayout.DoorZ));
+    float off = Vector3.Distance(Flat(layoutDoor), Flat(buildingDoorCenter));
+    Console.WriteLine($"  ArcadeLayout door centre {V(layoutDoor)} is {off * 1000:0} mm from the measured doorway");
+    if (off > 0.02f) Fail("ArcadeLayout.DoorX/DoorZ do not match the measured doorway");
+}
 
-// Walk-in modifications.
-var walkIn = buildingBoxes.Where(b => !ReferenceEquals(b.Source, seal.Source) && !leaves.Any(l => ReferenceEquals(l.Source, b.Source))).ToList();
-walkIn.AddRange(seal.SplitAroundOpening(doorway));
-// 0.4.1: each leaf is a clone placed in the vanilla "Door" pose; its origin (== the Collider
-// child's origin) is the hinge edge. Opening swings away from the player: inward when entering,
-// outward when leaving. Both variants are path-checked below.
 var hinges = leaves.Select(l => l.World.Translation).ToList();
 var leafCentres = leaves.Select(l => l.WorldCenter).ToList();
-var walkInOut = new List<Box>(walkIn);
-for (int i = 0; i < leaves.Count; i++)
 {
-    walkIn.Add(leaves[i].RotatedAbout(hinges[i], ChooseSign(hinges[i], leafCentres[i], inward, 88f), leaves[i].Name + " (open inward)"));
-    walkInOut.Add(leaves[i].RotatedAbout(hinges[i], ChooseSign(hinges[i], leafCentres[i], -inward, 88f), leaves[i].Name + " (open outward)"));
-}
-{
-    // Closed fit: the leaves meet in the middle and their hinge edges sit on the opening edges.
     float frameHalf = hinges.Max(h => MathF.Abs(Vector3.Dot(Flat(h - buildingDoorCenter), along)));
     var freeEdges = new List<float>();
     for (int i = 0; i < leaves.Count; i++)
@@ -126,80 +82,69 @@ for (int i = 0; i < leaves.Count; i++)
         freeEdges.Add(Vector3.Dot(Flat(hinges[i] + arm * 2f - buildingDoorCenter), along));
     }
     float centreGap = MathF.Abs(freeEdges[0] - freeEdges[1]);
-    float asym = MathF.Abs(MathF.Abs(Vector3.Dot(Flat(hinges[0] - buildingDoorCenter), along)) - MathF.Abs(Vector3.Dot(Flat(hinges[1] - buildingDoorCenter), along)));
-    float openingHalf = doorway.HalfExtentAlong(along, buildingDoorCenter);
-    Console.WriteLine($"Closed leaves: hinge edges at +-{frameHalf:0.000} m (opening half {openingHalf:0.000}, asymmetry {asym * 1000:0} mm); free edges meet with a {centreGap * 1000:0} mm gap. Jambs overlap each hinge edge by 20 mm; centre stop 35 mm wide.");
-    if (centreGap > 0.035f) { failures++; Console.WriteLine("  FAIL centre gap wider than the centre stop"); }
-    if (asym > 0.02f) { failures++; Console.WriteLine("  FAIL leaves offset from the opening"); }
-    if (frameHalf > openingHalf + 0.005f) { failures++; Console.WriteLine("  FAIL hinge edge outside the measured opening"); }
-}
-float roomHalf = doorWidth * 0.5f;
-float halfWidth = MathF.Max(doorwayHalf, roomHalf) + 0.12f;
-var vestRot = LookRotation(inward);
-Box Vest(string name, Vector3 local, Vector3 size) => Box.Oriented(name, buildingDoorCenter + Vector3.Transform(local, vestRot), vestRot, size);
-const float wallT = 0.12f, start = 0.04f;
-float panelTop = seal.MaxY;
-float vestHeight = Math.Clamp(panelTop - buildingDoorCenter.Y - 0.10f, 2.55f, CeilingH);
-float len = depth - start + 0.12f;
-Console.WriteLine($"Vestibule: height {vestHeight:0.00} m (ceiling slab top y {buildingDoorCenter.Y + vestHeight + 0.10f:0.00}) under the corner panel top y {panelTop:0.00}");
-if (buildingDoorCenter.Y + vestHeight + 0.10f > panelTop + 0.001f) { failures++; Console.WriteLine("  FAIL vestibule pokes through the corner panel"); }
-foreach (var list in new[] { walkIn, walkInOut })
-{
-    list.Add(Vest("vestibule wall left", new Vector3(-halfWidth - wallT * 0.5f, vestHeight * 0.5f, start + len * 0.5f), new Vector3(wallT, vestHeight, len)));
-    list.Add(Vest("vestibule wall right", new Vector3(halfWidth + wallT * 0.5f, vestHeight * 0.5f, start + len * 0.5f), new Vector3(wallT, vestHeight, len)));
+    Console.WriteLine($"Closed leaves: hinge edges at +-{frameHalf:0.000} m; free edges meet with a {centreGap * 1000:0} mm gap (35 mm centre stop); hinge stiles reach +-{frameHalf + 0.035f:0.000} m, lining opening +-{ArcadeLayout.DoorLiningHalf:0.000} m.");
+    if (centreGap > 0.035f) Fail("centre gap wider than the centre stop");
+    if (MathF.Abs(frameHalf - ArcadeLayout.LeafHalfSpan) > 0.01f) Fail("leaf hinge positions differ from ArcadeLayout.LeafHalfSpan");
+    if (frameHalf + 0.035f >= ArcadeLayout.DoorLiningHalf) Fail("hinge stiles would hit the wall lining");
 }
 
-var vanilla = new List<Box>(buildingBoxes);
-vanilla.AddRange(roomBoxes);
-vanilla.Add(RoomLeaf("room leaf A (closed)", doorStart, tangent, false));
-vanilla.Add(RoomLeaf("room leaf B (closed)", doorEnd, -tangent, false));
-walkIn.AddRange(roomBoxes);
-walkIn.Add(RoomLeaf("room leaf A (open)", doorStart, tangent, true));
-walkIn.Add(RoomLeaf("room leaf B (open)", doorEnd, -tangent, true));
-walkInOut.AddRange(roomBoxes);
-walkInOut.Add(RoomLeaf("room leaf A (open into room)", doorStart, tangent, true, intoRoom: true));
-walkInOut.Add(RoomLeaf("room leaf B (open into room)", doorEnd, -tangent, true, intoRoom: true));
-
-foreach (Box b in walkIn.Where(b => b.Name.StartsWith("corner")))
+// ---- Shell (exactly the mod's pieces) -----------------------------------------------------------
+var pieces = ArcadeLayout.WallPieces();
+var shellBoxes = new List<Box>();
+foreach (WallPiece piece in pieces)
 {
-    var a = Aabb.Of(b.Corners());
-    Console.WriteLine($"  {b.Name}: y {a.Min.Y:0.00}..{a.Max.Y:0.00}  x {a.Min.X:0.00}..{a.Max.X:0.00} z {a.Min.Z:0.00}..{a.Max.Z:0.00}");
+    var (cx, cy, cz) = piece.Centre;
+    var (sx, sy, sz) = piece.Size;
+    var (tx, tz) = piece.Wall.Tangent;
+    var rot = Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.Atan2(tx, tz));
+    shellBoxes.Add(RoomBox("lining " + piece.Name, new Vector3(cx, cy, cz), new Vector3(sx, sy, sz), rot));
 }
-// Only colliders that intersect the standing player's body band can block walking.
-vanilla = vanilla.Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
-walkIn = walkIn.Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
-walkInOut = walkInOut.Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
+var machineBoxes = ArcadeLayout.FloorItems()
+    .Select(f => RoomBox("item " + f.Id, new Vector3(f.X, ArcadeLayout.FloorTop + 0.5f, f.Z), new Vector3(f.SizeX, 1.0f, f.SizeZ), Quaternion.Identity)).ToList();
+
+// Walk-in: the corner-door seal is split around the doorway; the vanilla leaves are replaced by clones.
+var walkBase = buildingBoxes.Where(b => !ReferenceEquals(b.Source, seal.Source) && !leaves.Any(l => ReferenceEquals(l.Source, b.Source))).ToList();
+walkBase.AddRange(seal.SplitAroundOpening(doorway).Where(b => b.MaxY > bandMin && b.MinY < bandMax));
+walkBase.AddRange(shellBoxes.Where(b => b.MaxY > bandMin && b.MinY < bandMax));
+walkBase.AddRange(machineBoxes);
+
+Box LeafAt(int i, float degreesToward, Vector3 side) => leaves[i].RotatedAbout(hinges[i], ChooseSign(hinges[i], leafCentres[i], side, degreesToward), leaves[i].Name + $" ({degreesToward:0} deg)");
+var walkIn = new List<Box>(walkBase);
+var walkOut = new List<Box>(walkBase);
+for (int i = 0; i < leaves.Count; i++)
+{
+    walkIn.Add(LeafAt(i, 88f, inward));
+    walkOut.Add(LeafAt(i, 88f, -inward));
+}
 
 Vector3 street = buildingDoorCenter - inward * 2.5f;
-Vector3 insideRoom = roomDoorCenter + roomInward * 1.2f;
-Console.WriteLine($"Path query: street {V(street)} -> inside room {V(insideRoom)}");
-
+Vector3 justInside = buildingDoorCenter + inward * 0.9f;
+Vector3 insideRoom = RoomToWorld(new Vector3(0f, 0f, 0f));
+if (args.Contains("--debugpath"))
+{
+    for (float t = 0f; t <= 1.0001f; t += 0.05f)
+    {
+        Vector3 q = Vector3.Lerp(street, insideRoom, t);
+        var near = walkIn.Select(b => (b.Name, d: b.Distance2D(new Vector2(q.X, q.Z)))).Where(x => x.d < 0.35f).OrderBy(x => x.d).Take(3);
+        Console.WriteLine($"  {V(q)}: " + string.Join("; ", near.Select(n => $"{n.Name} {n.d:0.00}")));
+    }
+}
+Console.WriteLine($"Path query: street {V(street)} -> just inside {V(justInside)} -> room centre {V(insideRoom)}");
 foreach (float radius in new[] { 0.30f, 0.40f })
 {
-    var vanillaResult = Grid.FindPath(vanilla, street, insideRoom, radius);
-    var walkInResult = Grid.FindPath(walkIn, street, insideRoom, radius);
-    Console.WriteLine($"  capsule r={radius:0.00} m  vanilla: {(vanillaResult.Found ? "PATH" : "BLOCKED")} {vanillaResult.Note}");
-    Console.WriteLine($"  capsule r={radius:0.00} m  walk-in: {(walkInResult.Found ? "PATH" : "BLOCKED")} length {walkInResult.Length:0.0} m, min clearance {walkInResult.MinClearance:0.00} m {walkInResult.Note}");
-    if (vanillaResult.Found) { failures++; Console.WriteLine("  FAIL vanilla building should be sealed (that is why the old build teleported)"); }
-    if (!walkInResult.Found) { failures++; Console.WriteLine("  FAIL walk-in entrance is not walkable"); }
-    var outResult = Grid.FindPath(walkInOut, insideRoom, street, radius);
-    Console.WriteLine($"  capsule r={radius:0.00} m  leaving (leaves swung the other way): {(outResult.Found ? "PATH" : "BLOCKED")} length {outResult.Length:0.0} m {outResult.Note}");
-    if (!outResult.Found) { failures++; Console.WriteLine("  FAIL leaving the arcade is blocked"); }
+    var vanilla = Grid.FindPath(buildingBoxes, street, justInside, radius);
+    var enter = Grid.FindPath(walkIn, street, insideRoom, radius);
+    var leave = Grid.FindPath(walkOut, insideRoom, street, radius);
+    var step = Grid.FindPath(walkIn, street, justInside, radius);
+    Console.WriteLine($"  capsule r={radius:0.00}  vanilla: {(vanilla.Found ? "PATH" : "BLOCKED")} | enter: {(enter.Found ? "PATH" : "BLOCKED")} {enter.Length:0.0} m | leave: {(leave.Found ? "PATH" : "BLOCKED")} | street->just inside {step.Length:0.00} m (straight {Vector3.Distance(Flat(street), Flat(justInside)):0.00} m)");
+    if (vanilla.Found) Fail("vanilla building should be sealed");
+    if (!enter.Found) Fail("cannot walk from the street into the arcade " + enter.Note);
+    if (!leave.Found) Fail("cannot walk out of the arcade " + leave.Note);
+    // No vestibule / tunnel: one step through the door is already the arcade floor.
+    if (!step.Found || step.Length > Vector3.Distance(Flat(street), Flat(justInside)) * 1.6f) Fail("the way in is not straight through the door");
 }
 
-// The vestibule must stay inside the building and must not cut into the room interior.
-var interior = new Aabb(new Vector3(-52.40f, -10, 135.65f), new Vector3(-43.65f, 10, 147.40f));
-foreach (Box b in walkIn.Where(b => b.Name.StartsWith("vestibule")))
-{
-    var a = Aabb.Of(b.Corners());
-    bool insideBuilding = a.Min.X >= interior.Min.X - 0.3f && a.Max.X <= interior.Max.X + 0.3f && a.Min.Z >= interior.Min.Z - 0.3f && a.Max.Z <= interior.Max.Z + 0.3f;
-    Console.WriteLine($"  {b.Name}: x {a.Min.X:0.00}..{a.Max.X:0.00} z {a.Min.Z:0.00}..{a.Max.Z:0.00} insideBuilding={insideBuilding}");
-    if (!insideBuilding) failures++;
-}
-float rise = (roomOrigin.Y + 0.043f) - foot;
-Console.WriteLine($"  vestibule ramp: rise {rise:0.000} m over {depth:0.00} m = {MathF.Atan2(rise, depth) * 180f / MathF.PI:0.0} deg");
-
-failures += RoomChecks.Run(scene, buildingGo, roomOrigin, roomRot, CeilingH, WallH, FloorTop, rise, depth);
+failures += RoomChecks.Run(scene, buildingGo, nearBoxes, roomOrigin, roomRot, shellBoxes, machineBoxes, leaves, hinges, leafCentres, buildingDoorCenter, inward, along, doorwayHeight, level1);
 Console.WriteLine(failures == 0 ? "\nGEOMETRY CHECK PASSED" : $"\nGEOMETRY CHECK FAILED ({failures})");
 return failures == 0 ? 0 : 1;
 
@@ -233,6 +178,29 @@ internal sealed record Box(string Name, string Path, object Source, Matrix4x4 Wo
     }
 
     public Vector3 WorldCenter => Vector3.Transform(Center, World);
+
+    /// <summary>True when a world point is inside this (oriented) box.</summary>
+    public bool Contains(Vector3 p)
+    {
+        Matrix4x4.Invert(World, out Matrix4x4 inv);
+        Vector3 l = Vector3.Transform(p, inv) - Center;
+        return MathF.Abs(l.X) <= Size.X * 0.5f && MathF.Abs(l.Y) <= Size.Y * 0.5f && MathF.Abs(l.Z) <= Size.Z * 0.5f;
+    }
+
+    /// <summary>World sample points through the box volume, inset from every face (5 cm grid).</summary>
+    public IEnumerable<Vector3> InteriorSamples(float inset)
+    {
+        int Steps(float size) => Math.Max(2, (int)(size / 0.05f));
+        int nx = Steps(Size.X), ny = Steps(Size.Y), nz = Steps(Size.Z);
+        Vector3 half = Vector3.Max(Size * 0.5f - new Vector3(inset), Vector3.Zero);
+        for (int i = 0; i <= nx; i++)
+            for (int j = 0; j <= ny; j++)
+                for (int k = 0; k <= nz; k++)
+                {
+                    var local = Center + new Vector3(-half.X + 2 * half.X * i / nx, -half.Y + 2 * half.Y * j / ny, -half.Z + 2 * half.Z * k / nz);
+                    yield return Vector3.Transform(local, World);
+                }
+    }
     Vector3 Axis(int i) => Vector3.TransformNormal(i == 0 ? Vector3.UnitX : i == 1 ? Vector3.UnitY : Vector3.UnitZ, World);
     public float MinY => Corners().Min(c => c.Y);
     public float MaxY => Corners().Max(c => c.Y);
@@ -440,6 +408,23 @@ internal sealed class Scene
     static string Str(AssetsFileReader rd) { int n = rd.ReadInt32(); var s = Encoding.UTF8.GetString(rd.ReadBytes(n)); rd.Align(); return s; }
 
     public long TransformOf(long go) => _goTr[go];
+
+    /// <summary>Diagnostic: hierarchy with world TRS, box colliders and component type ids.</summary>
+    public void Dump(long t, int depth)
+    {
+        var x = _tr[t];
+        var w = World(t);
+        Matrix4x4.Decompose(w, out Vector3 sc, out Quaternion q, out Vector3 tr);
+        float yaw = MathF.Atan2(2 * (q.W * q.Y + q.X * q.Z), 1 - 2 * (q.Y * q.Y + q.X * q.X)) * 180f / MathF.PI;
+        var types = _comps[x.go].Where(_info.ContainsKey).Select(c => _info[c].TypeId).ToList();
+        Console.WriteLine($"{new string(' ', depth * 2)}{_name.GetValueOrDefault(x.go)} {(_active[x.go] ? "" : "[inactive] ")}pos ({tr.X:0.000},{tr.Y:0.000},{tr.Z:0.000}) yaw {yaw:0.0} scale ({sc.X:0.###},{sc.Y:0.###},{sc.Z:0.###}) types [{string.Join(",", types)}]");
+        foreach (var b in Boxes(t))
+        {
+            var a = Aabb.Of(b.Corners());
+            Console.WriteLine($"{new string(' ', depth * 2)}  BOX x {a.Min.X:0.000}..{a.Max.X:0.000} y {a.Min.Y:0.000}..{a.Max.Y:0.000} z {a.Min.Z:0.000}..{a.Max.Z:0.000} (local size {b.Size.X:0.###},{b.Size.Y:0.###},{b.Size.Z:0.###})");
+        }
+        foreach (long c in x.ch) if (_tr.ContainsKey(c)) Dump(c, depth + 1);
+    }
 
     public Matrix4x4 World(long t)
     {

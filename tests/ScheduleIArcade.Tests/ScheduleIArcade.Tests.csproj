@@ -17,5 +17,10 @@
     <Compile Include="..\..\src\ScheduleIArcade\Utils\LocalAssetManifest.cs" Link="Shared\LocalAssetManifest.cs" />
     <Compile Include="..\..\src\ScheduleIArcade\Games\Pacman\PacmanGhostAi.cs" Link="Shared\PacmanGhostAi.cs" />
     <Compile Include="..\..\src\ScheduleIArcade\Games\AirHockey\AirHockeySimulation.cs" Link="Shared\AirHockeySimulation.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\ArcadeLayout.cs" Link="Shared\ArcadeLayout.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\ArcadeDimensions.cs" Link="Shared\ArcadeDimensions.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\CabinetPaint.cs" Link="Shared\CabinetPaint.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\SurfacePatterns.cs" Link="Shared\SurfacePatterns.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\CrtOpening.cs" Link="Shared\CrtOpening.cs" />
   </ItemGroup>
 </Project>

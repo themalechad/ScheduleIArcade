@@ -374,26 +374,7 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
         return true;
     }
 
-    private static bool IsInsideFinishedFootprint(Vector3 point)
-    {
-        const float west = -3.185f;
-        const float east = 3.185f;
-        const float south = -4.016f;
-        const float north = 4.016f;
-        const float chamferStartZ = 2.077f;
-        const float northWestX = -0.976f;
-        const float margin = 0.015f;
-
-        if (point.x < west + margin || point.x > east - margin ||
-            point.z < south + margin || point.z > north - margin)
-            return false;
-        if (point.z <= chamferStartZ)
-            return true;
-
-        float t = Mathf.InverseLerp(chamferStartZ, north, point.z);
-        float minimumX = Mathf.Lerp(west, northWestX, t);
-        return point.x >= minimumX + margin;
-    }
+    private static bool IsInsideFinishedFootprint(Vector3 point) => ArcadeLayout.IsInsideInterior(point.x, point.z, 0.015f);
 
     private static bool IsRoomArchitecture(Transform transform, Transform room)
     {
@@ -403,12 +384,7 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
             string name = current.name;
             if (name.IndexOf("Floor", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 name.IndexOf("Ceiling", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                name.StartsWith("RawArcade_Collision_", StringComparison.OrdinalIgnoreCase) ||
-                name.StartsWith("RawArcade_Wall_", StringComparison.OrdinalIgnoreCase) ||
-                name.StartsWith("Arcade_Baseboard", StringComparison.OrdinalIgnoreCase) ||
-                name.StartsWith("Arcade_Crown", StringComparison.OrdinalIgnoreCase) ||
-                name.StartsWith("Arcade_Corner", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("Enviorment", StringComparison.OrdinalIgnoreCase))
+                name.StartsWith("ARCADE_SHELL_", StringComparison.OrdinalIgnoreCase))
                 return true;
             current = current.parent;
         }

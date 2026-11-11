@@ -251,6 +251,13 @@ internal sealed class ArcadeTvViewService
                 var (width, length) = Games.Pinball.PinballPlayfieldMapping.QuadSize();
                 distance = FitDistance(length * 0.5f, width * 0.5f, fov);
             }
+            else if (!arcadeTv)
+            {
+                // Doom uprights: frame the fitted 4:3 picture (it fills the measured CRT opening) so
+                // it fills the view without the cabinet bezel crowding it.
+                Vector3 lossy = cabinet.ScreenRenderer.transform.lossyScale;
+                distance = FitDistance(Mathf.Abs(lossy.y) * 0.5f, Mathf.Abs(lossy.x) * 0.5f, fov);
+            }
             cameraPosition = screenCenter + viewingDirection * distance + Vector3.up * 0.04f;
             cameraRotation = Quaternion.LookRotation(screenCenter - cameraPosition, Vector3.up);
         }

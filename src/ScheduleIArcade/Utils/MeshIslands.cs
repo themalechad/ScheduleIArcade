@@ -225,11 +225,15 @@ internal static class PacmanLogoFix
 /// <summary>Placement of the Pac-Man picture on the cocktail table (table-local metres).</summary>
 internal static class PacmanScreenLayout
 {
-    /// <summary>Centre of the printed monitor inset, 4 mm above the table top.</summary>
-    public static readonly Vector3 LocalCentre = new(-0.119f, 0.303f, -0.015f);
-    /// <summary>Picture height along the table axis (288 px) and width across it (224 px).</summary>
-    public const float Height = 0.524f;
-    public const float Width = Height * ArcadeDimensions.PacManNativeWidth / ArcadeDimensions.PacManNativeHeight;
+    // 0.6.0: the old printed texture inset is gone (the table is repainted), so the picture is fitted to
+    // the table's real monitor face under the glass, measured on the mesh: x -0.415..0.222 along the
+    // table, z -0.228..0.203 across, top glass y 0.299. The 224 x 288 portrait picture is width-limited:
+    // 0.415 m across (8 mm border each side) and 0.534 m along, centred on the monitor, 4 mm above the glass.
+    /// <summary>Centre of the monitor face, 4 mm above the table glass.</summary>
+    public static readonly Vector3 LocalCentre = new(-0.0965f, 0.303f, -0.0125f);
+    /// <summary>Picture width across the table (224 px) and height along it (288 px).</summary>
+    public const float Width = 0.415f;
+    public const float Height = Width * ArcadeDimensions.PacManNativeHeight / ArcadeDimensions.PacManNativeWidth;
 
     /// <summary>
     /// Face-up quad whose texture top points away from the seated player, so the maze reads upright

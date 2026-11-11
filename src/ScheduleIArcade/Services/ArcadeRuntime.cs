@@ -22,6 +22,7 @@ internal sealed class ArcadeRuntime : IDisposable
     private ArcadeBuildPlacementHookService? _buildPlacementHooks;
     private ArcadeAmbienceService? _ambience;
     private ArcadeCustomAssetPlacementService? _customAssets;
+    private ArcadeNpcAccessService? _npcAccess;
 
     public ArcadeRuntime(ArcadePreferences preferences) => _preferences = preferences;
 
@@ -64,6 +65,11 @@ internal sealed class ArcadeRuntime : IDisposable
             _preferences,
             () => _session.IsPlaying || _interaction?.IsLookingAtCabinet == true || _customAssets?.IsHoldingAsset == true);
         _walkIn.Initialize();
+
+        // NPCs and police walk in through the same door: arcade floor navmesh + door link + carved cabinets.
+        _npcAccess = new ArcadeNpcAccessService(_location);
+        if (_walkIn.IsWalkInReady)
+            _npcAccess.Initialize();
         ArcadeWalkInService walkIn = _walkIn;
         _interaction = new CabinetInteractionService(_cabinets, _session, () => walkIn.IsInsideArcade);
         _customAssets = new ArcadeCustomAssetPlacementService(
@@ -116,6 +122,8 @@ internal sealed class ArcadeRuntime : IDisposable
     {
         _session?.Dispose();
         _customAssets?.Dispose();
+        _npcAccess?.Dispose();
+        _npcAccess = null;
         _walkIn?.Dispose();
         _dressing?.Dispose();
         LocalAssetPack.Reset();

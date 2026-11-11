@@ -81,7 +81,6 @@ internal static class ModPaths
         Directory.CreateDirectory(ModRoot);
         Directory.CreateDirectory(AssetsRoot);
         Directory.CreateDirectory(RawSceneRoot);
-        Directory.CreateDirectory(RawSceneTexturesRoot);
         Directory.CreateDirectory(PacManAssetsRoot);
         Directory.CreateDirectory(AudioRoot);
         Directory.CreateDirectory(GamesRoot);

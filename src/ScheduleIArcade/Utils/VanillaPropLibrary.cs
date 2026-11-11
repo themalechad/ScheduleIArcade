@@ -3,10 +3,16 @@ using UnityEngine;
 namespace ScheduleIArcade.Utils;
 
 /// <summary>
-/// Finds Schedule I's own props by their exact scene/prefab names in what the game has already
-/// loaded, and makes VISUAL-ONLY copies of them: plain GameObjects holding the vanilla meshes and
-/// materials, with no scripts, network objects, interactions or colliders. Nothing is read from
-/// disk or packaged; when the game is not loaded the props are simply skipped.
+/// Finds Schedule I's own props and makes VISUAL-ONLY copies of them: plain GameObjects holding the
+/// vanilla meshes and materials, with no scripts, network objects, interactions or colliders.
+/// Lookup order (0.6.0):
+///   1. an unbatched instance already in the loaded scene, by exact name;
+///   2. the game's own Resources (Resources.Load of a buildable prefab path such as
+///      "storage/displaycabinet/DisplayCabinet_Built"). The prefab asset is only READ as a template:
+///      it is never instantiated, so none of its scripts/network objects run (Schedule I 0.4.7f12 has no
+///      Addressables or AssetBundles: StreamingAssets holds only default saves);
+///   3. the optional personal LocalAssets pack (last resort; absent in the public build).
+/// Nothing is extracted to disk or packaged.
 ///
 /// level1 is statically batched, so many instances render through a world-space
 /// "Combined Mesh (root: scene) N"; copying those would draw a chunk of the town. Only instances
@@ -77,7 +83,12 @@ internal static class VanillaPropLibrary
 
     /// <summary>First reusable instance for any of the names, in order.</summary>
     public static bool TryFind(string[] names, out Transform? source, out List<MeshRenderer>? parts, out string matchedName)
+        => TryFind(names, Array.Empty<string>(), out source, out parts, out matchedName, out _);
+
+    /// <summary>Where the last successful lookup came from: "scene", "Resources" or "LocalAssets".</summary>
+    public static bool TryFind(string[] names, string[] resourcePaths, out Transform? source, out List<MeshRenderer>? parts, out string matchedName, out string origin)
     {
+        origin = "scene";
         EnsureIndex();
         foreach (string name in names)
         {
@@ -96,14 +107,44 @@ internal static class VanillaPropLibrary
                 return true;
             }
         }
-        // Live scene missed (nothing unbatched, or the name is not loaded): try the optional
-        // personal LocalAssets pack. This is a no-op when the folder is absent.
+        // Live scene missed (nothing unbatched, or the name is not loaded): the game's Resources.
+        foreach (string path in resourcePaths)
+        {
+            Transform? prefab = LoadResourceTemplate(path);
+            if (prefab == null)
+                continue;
+            List<MeshRenderer>? found = ReusableParts(prefab);
+            if (found == null)
+                continue;
+            source = prefab;
+            parts = found;
+            matchedName = path;
+            origin = "Resources";
+            return true;
+        }
+        // Last resort: the optional personal LocalAssets pack (no-op when the folder is absent).
+        origin = "LocalAssets";
         if (LocalAssetPack.TryGetVisual(names, out source, out parts, out matchedName))
             return true;
         source = null;
         parts = null;
         matchedName = string.Empty;
         return false;
+    }
+
+    /// <summary>Resources.Load of a prefab asset (forward slashes, no extension); null when absent.</summary>
+    public static Transform? LoadResourceTemplate(string path)
+    {
+        try
+        {
+            UnityEngine.Object? asset = Resources.Load(path);
+            GameObject? go = asset != null ? asset.TryCast<GameObject>() : null;
+            return go != null ? go.transform : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public static int CountInstances(string name)

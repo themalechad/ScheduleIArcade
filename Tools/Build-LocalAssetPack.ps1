@@ -56,49 +56,24 @@ $meshes = @(
     @{ Src = Join-Path $meshRoot "WindowFrame.glb";                      Names = @("WindowFrame"); Dest = "WindowFrame.glb"; Texture = "grocerystore_WindowFrame mat" },
     @{ Src = Join-Path $meshRoot "WindowWall.glb";                       Names = @("WindowWall"); Dest = "WindowWall.glb" },
     @{ Src = Join-Path $meshRoot "UpperWindowWall.glb";                  Names = @("UpperWindowWall"); Dest = "UpperWindowWall.glb" },
-    @{ Src = Join-Path $meshRoot "Light_Fluorescent_Light_LOD0.glb";     Names = @("Fluorescent_Light", "Light_Fluorescent_Light_LOD0", "tube light 1", "tube light 2", "tube light 3", "tube light 4"); Dest = "Light_Fluorescent_Light_LOD0.glb" },
-    @{ Src = Join-Path $meshRoot "Fan.glb";                              Names = @("CeilingFan", "Fan", "ceiling fan (table)", "ceiling fan (air hockey)"); Dest = "Fan.glb"; Texture = "Fan_Base_color" },
-    @{ Src = Join-Path $meshRoot "Counter.glb";                          Names = @("Counter", "Ornate Desk", "prize counter"); Dest = "Counter.glb" },
+    @{ Src = Join-Path $meshRoot "Light_Fluorescent_Light_LOD0.glb";     Names = @("Fluorescent_Light", "Light_Fluorescent_Light_LOD0"); Dest = "Light_Fluorescent_Light_LOD0.glb" },
+    @{ Src = Join-Path $meshRoot "Counter.glb";                          Names = @("Counter", "prize counter"); Dest = "Counter.glb" },
     @{ Src = Join-Path $meshRoot "Frontdesk.glb";                        Names = @("Frontdesk"); Dest = "Frontdesk.glb" },
     @{ Src = Join-Path $meshRoot "Desk.glb";                             Names = @("Desk"); Dest = "Desk.glb" },
-    @{ Src = Join-Path $meshRoot "ShopRack.glb";                         Names = @("Shop Rack", "ShopRack", "prize shelf"); Dest = "ShopRack.glb"; Texture = "shop rack_Base_Color" },
-    @{ Src = Join-Path $meshRoot "Shelf.glb";                            Names = @("Shelf"); Dest = "Shelf.glb" },
-    @{ Src = Join-Path $meshRoot "Chair.glb";                            Names = @("Chair"); Dest = "Chair.glb" },
-    @{ Src = Join-Path $meshRoot "Chair_Business.glb";                   Names = @("Chair_Business", "TV chair 1", "TV chair 2"); Dest = "Chair_Business.glb" },
-    @{ Src = Join-Path $meshRoot "Armchair.glb";                         Names = @("Armchair"); Dest = "Armchair.glb" },
-    @{ Src = Join-Path $meshRoot "Bench.glb";                            Names = @("Bench"); Dest = "Bench.glb" },
-    @{ Src = Join-Path $meshRoot "Plant1_LOD0.glb";                      Names = @("Plant1", "plant"); Dest = "Plant1_LOD0.glb" },
-    @{ Src = Join-Path $meshRoot "Flowerpot.glb";                        Names = @("Flowerpot"); Dest = "Flowerpot.glb" },
-    @{ Src = Join-Path $meshRoot "Planter.glb";                          Names = @("Planter"); Dest = "Planter.glb" },
-    @{ Src = Join-Path $meshRoot "Clock.glb";                            Names = @("Clock", "WallClock_Built", "wall clock"); Dest = "Clock.glb"; Texture = "clock" },
-    @{ Src = Join-Path $meshRoot "Trash.glb";                            Names = @("Trash Can Prop", "Rubbish bin", "bin by the door", "bin by the uprights"); Dest = "Trash.glb"; Texture = "rubbish bin_Base_Color" },
-    @{ Src = Join-Path $resRoot "furniture\metaltrashcan\TrashCan_Built.glb"; Names = @("TrashCan_Built"); Dest = "TrashCan_Built.glb" },
-    @{ Src = Join-Path $resRoot "furniture\smalltrashcan\SmallTrashCan_Built.glb"; Names = @("SmallTrashCan_Built"); Dest = "SmallTrashCan_Built.glb" },
-    @{ Src = Join-Path $resRoot "furniture\floorrack\FloorRack.glb";     Names = @("FloorRack", "StorageRack_Small", "StorageRack_Medium"); Dest = "FloorRack.glb" },
     @{ Src = Join-Path $resRoot "lights\halogenlight\HalogenLight.glb";  Names = @("HalogenLight"); Dest = "HalogenLight.glb" },
     @{ Src = Join-Path $resRoot "lights\ledlight\LEDLight.glb";          Names = @("LEDLight"); Dest = "LEDLight.glb" }
 )
 
 $textures = @(
     @{ Src = Join-Path $texRoot "Ceiling1_Albedo.png"; Names = @("Ceiling", "ceiling_0"); Dest = "Ceiling1_Albedo.png" },
-    @{ Src = Join-Path $texRoot "Tiles2_basecolor.png"; Names = @("Tiles", "Tiles2"); Dest = "Tiles2_basecolor.png" },
-    @{ Src = Join-Path $texRoot "Plaster1_BW_Albedo.png"; Names = @("Plaster1"); Dest = "Plaster1_BW_Albedo.png" },
     @{ Src = Join-Path $texRoot "Wallpaper_B.png"; Names = @("Wallpaper_B", "Wallpaper_B1", "Wallpaper_B2", "Wallpaper_B*"); Dest = "Wallpaper_B.png" },
-    @{ Src = Join-Path $texRoot "Wood_Floor_A.png"; Names = @("Wood_Floor_A", "Wood_Floor_*"); Dest = "Wood_Floor_A.png" },
     @{ Src = Join-Path $texRoot "Carpet_basecolor.png"; Names = @("Carpet", "Carpet1"); Dest = "Carpet_basecolor.png" },
     @{ Src = Join-Path $texRoot "Doors_albedo.png"; Names = @("Doors Black", "Doors_albedo"); Dest = "Doors_albedo.png" },
     @{ Src = Join-Path $texRoot "grocerystore_DoorFrame_AlbedoTransparency.png"; Names = @("grocerystore_DoorFrame mat"); Dest = "grocerystore_DoorFrame_AlbedoTransparency.png" },
     @{ Src = Join-Path $texRoot "grocerystore_LargeWindowFrame_AlbedoTransparency.png"; Names = @("grocerystore_LargeWindowFrame mat"); Dest = "grocerystore_LargeWindowFrame_AlbedoTransparency.png" },
     @{ Src = Join-Path $texRoot "grocerystore_WindowFrame_AlbedoTransparency.png"; Names = @("grocerystore_WindowFrame mat", "WindowFrame"); Dest = "grocerystore_WindowFrame_AlbedoTransparency.png" },
-    @{ Src = Join-Path $texRoot "Fan_Base_color.png"; Names = @("Fan_Base_color"); Dest = "Fan_Base_color.png" },
-    @{ Src = Join-Path $texRoot "clock.png"; Names = @("clock"); Dest = "clock.png" },
-    @{ Src = Join-Path $texRoot "Clock face.png"; Names = @("Clock face"); Dest = "Clock face.png" },
-    @{ Src = Join-Path $texRoot "trash can.png"; Names = @("trash can"); Dest = "trash can.png" },
-    @{ Src = Join-Path $texRoot "rubbish bin_Base_Color.png"; Names = @("rubbish bin_Base_Color"); Dest = "rubbish bin_Base_Color.png" },
-    @{ Src = Join-Path $texRoot "shop rack_Base_Color.png"; Names = @("shop rack_Base_Color"); Dest = "shop rack_Base_Color.png" },
-    @{ Src = Join-Path $texRoot "cash register_Base_Color.png"; Names = @("Cash Register", "CashCounter", "counter till", "cash register_Base_Color"); Dest = "cash register_Base_Color.png" },
+    @{ Src = Join-Path $texRoot "cash register_Base_Color.png"; Names = @("Cash Register", "CashCounter", "cash register_Base_Color"); Dest = "cash register_Base_Color.png" },
     @{ Src = Join-Path $texRoot "cashcounter_Body_AlbedoTransparency.png"; Names = @("cashcounter_Body"); Dest = "cashcounter_Body_AlbedoTransparency.png" },
-    @{ Src = Join-Path $texRoot "vendingmachine_Body_AlbedoTransparency.png"; Names = @("Vending Machine", "Display Fridge", "vendingmachine_Body"); Dest = "vendingmachine_Body_AlbedoTransparency.png" }
 )
 
 function Copy-Mesh([hashtable]$item) {
@@ -190,7 +165,7 @@ foreach ($item in $textures) {
 $notice = "Personal local pack built from a Schedule I install you own. Do not redistribute this folder or the private ZIP."
 $manifest = @"
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "notice": "$notice",
   "source": "AssetRipper PrimaryContent (Schedule I 0.4.7f12), curated fallback subset only",
   "entries": [

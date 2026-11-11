@@ -7,10 +7,11 @@ namespace ScheduleIArcade.Services;
 
 internal sealed class ArcadeLocationService : IDisposable
 {
-    // Ripped Main.unity places the native Arcade building at (-48,-4,141.5) with a 180-degree
-    // rotation. This user-supplied point is the usable interior alignment inside that shell.
-    private static readonly Vector3 NativeArcadeInteriorPosition = new(-48.4f, -3.8f, 141.4f);
-    private const float NativeArcadeInteriorYaw = 180f;
+    // 0.6.0: the room root sits at the centre of the vanilla Arcade (1) building (-48, *, 141.5) with
+    // the building's 180-degree yaw, and its floor top (local 0.043) is exactly the foundation top /
+    // sidewalk height y -3.90, so the threshold is level. See ArcadeLayout for the measurements.
+    private static readonly Vector3 NativeArcadeInteriorPosition = new(ArcadeLayout.WorldOriginX, ArcadeLayout.WorldOriginY, ArcadeLayout.WorldOriginZ);
+    private const float NativeArcadeInteriorYaw = ArcadeLayout.RoomYaw;
 
     private readonly AssetBundleService _assets;
     private readonly ArcadePreferences _preferences;
@@ -27,6 +28,8 @@ internal sealed class ArcadeLocationService : IDisposable
     public Transform? ExitMarker { get; private set; }
     public bool UsingProceduralFallback { get; private set; }
     public bool UsingRawScene { get; private set; }
+    /// <summary>The arcade's walkable floor mesh (room local), used to build the NPC NavMesh.</summary>
+    public Mesh? FloorMesh => _rawScene.FloorMesh;
 
     public bool Spawn()
     {

@@ -33,6 +33,11 @@ var tests = new (string Name, Action Body)[]
     ("local pack manifest parses names, aliases and transparent flag", LocalAssetTests.ParsesManifestAndLooksUpNames),
     ("local pack manifest is graceful on bad JSON", LocalAssetTests.ManifestIsGracefulOnBadJson),
     ("repository public tree has no ripped LocalAssets files", LocalAssetTests.RepoHasNoRippedLocalAssets),
+    ("0.6.0 layout fills the Arcade ground floor (wall 0.25-0.33 m, level floor, first-floor ceiling)", ArcadeV060Tests.LayoutFillsTheBuilding),
+    ("0.6.0 wall linings close the outline; one door, five windows", ArcadeV060Tests.WallsAreClosedAndOpeningsInRange),
+    ("0.6.0 cabinet paint: flat soft cells, UVs inside cells, no neon", ArcadeV060Tests.CabinetPaintIsFlatAndCovered),
+    ("0.6.0 procedural carpet/wallpaper dark, ceiling light, none neon", ArcadeV060Tests.SurfacePatternsAreSubdued),
+    ("0.6.0 Doom 4:3 picture fills the measured CRT opening; nothing painted over it", ArcadeV060Tests.DoomPictureFillsTheMeasuredCrt),
 };
 
 int failed = 0;

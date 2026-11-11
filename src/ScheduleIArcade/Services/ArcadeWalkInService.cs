@@ -7,19 +7,18 @@ using UnityEngine;
 namespace ScheduleIArcade.Services;
 
 /// <summary>
-/// Makes the arcade a physically continuous walk-in shop inside the real Northtown Arcade
-/// building. There is no teleport anywhere: the player walks through the building's own glass
-/// corner doors, a short vestibule and the room's double door.
+/// Makes the arcade a physically continuous walk-in shop: the whole ground floor of the real
+/// Northtown Arcade building. There is no teleport and no vestibule: the building's own glass corner
+/// door is the ONE entrance, and stepping through it puts the player on the arcade floor.
 ///
 /// Measured from Schedule I 0.4.7f12 level1 (Map/Hyland Point/Region_Northtown/Arcade (1)):
-///   * building interior x -52.40..-43.65, z 135.65..147.40, floor (Foundation) top y = -3.90;
-///   * entrance = arcade/CornerDoor, a 45-degree chamfer panel whose single BoxCollider
-///     (0.2 x 4.24 x 3.5 m) seals the whole chamfer, holding two "Metal Glass Door (Static)"
-///     StaticDoor leaves (each with a 2 m box collider scaled to ~1.05 x 2.1 m);
-///   * the room's chamfer double door sits ~1.66 m directly behind it (0.05 m tangential offset).
-/// The service replaces the sealing collider with stubs + lintel around the measured doorway,
-/// swings the vanilla glass-door models open on hinges, builds an enclosed vestibule, and
-/// derives "inside the arcade" from the player's position. Everything is restored on Dispose.
+///   * entrance = arcade/CornerDoor, a 45-degree chamfer panel whose single BoxCollider seals the
+///     chamfer, holding two "Metal Glass Door (Static)" StaticDoor leaves (statically batched);
+///   * floor (Foundation top) y = -3.90, equal to the sidewalk outside the door.
+/// The service replaces the sealing collider with stubs + lintel around the measured doorway, hides
+/// the batched leaves and swings clones of an unbatched vanilla glass PivotDoor leaf in their exact
+/// pose (from either side, away from the player; NPCs open it too), makes the ground-floor window
+/// glass clear and derives "inside the arcade" from the player's position. Restored on Dispose.
 /// </summary>
 internal sealed class ArcadeWalkInService : IDisposable
 {
@@ -28,6 +27,7 @@ internal sealed class ArcadeWalkInService : IDisposable
     private const float AutoCloseDistance = 4.5f;
     private const float AutoCloseDelay = 6f;
     private const float SwingSeconds = 0.55f;
+    private const float LeafLift = 0.006f;
 
     private readonly ArcadeLocationService _location;
     private readonly ArcadePreferences _preferences;
@@ -40,6 +40,12 @@ internal sealed class ArcadeWalkInService : IDisposable
     private Vector3 _entrancePoint;
     private bool _occludersHidden;
     private DoorPair? _target;
+    private DoorPair? _door;
+    private float _npcScanTimer;
+    private float _npcAwayTimer;
+    private bool _openedForNpc;
+    private const float NpcOpenDistance = 2.2f;
+    private const float NpcCloseDelay = 1.5f;
     private bool _initialized;
     private Vector3 _playerPosition;
 
@@ -81,20 +87,9 @@ internal sealed class ArcadeWalkInService : IDisposable
                 return;
             }
 
-            Transform? roomDoor = FindDeep(_location.RoomInstance.transform, Constants.RoomDoorRootName);
-            Transform? hingeA = roomDoor != null ? FindDeep(roomDoor, Constants.RoomDoorHingeA) : null;
-            Transform? hingeB = roomDoor != null ? FindDeep(roomDoor, Constants.RoomDoorHingeB) : null;
-            if (roomDoor == null || hingeA == null || hingeB == null)
-            {
-                MelonLogger.Error("Walk-in arcade: the arcade room's hinged double door was not generated.");
-                return;
-            }
-
-            // The vanilla glass leaves are STATICALLY BATCHED in level1 (their MeshFilters point at
-            // "Combined Mesh (root: scene) 24/25"), so moving their transforms would move only the
-            // colliders while the visible doors stayed shut. Measure each leaf from its BoxCollider,
-            // hide the batched leaf, and swing a replacement built from that measurement with the
-            // vanilla door's own materials.
+            // The vanilla glass leaves are STATICALLY BATCHED in level1, so moving their transforms
+            // would move only the colliders. Measure each leaf from its BoxCollider, hide the batched
+            // leaf, and swing a clone of an unbatched vanilla glass PivotDoor leaf in its exact pose.
             var measured = new List<(Il2CppScheduleOne.Doors.StaticDoor door, Transform model, BoxCollider box, Bounds bounds)>();
             Bounds doorway = default;
             bool haveDoorway = false;
@@ -112,84 +107,58 @@ internal sealed class ArcadeWalkInService : IDisposable
                 }
                 if (box == null)
                     continue;
-
                 Bounds leafBounds = box.bounds;
                 if (!haveDoorway) { doorway = leafBounds; haveDoorway = true; }
                 else doorway.Encapsulate(leafBounds);
                 measured.Add((door, model, box, leafBounds));
             }
-
             if (!haveDoorway || measured.Count == 0)
             {
                 MelonLogger.Error("Walk-in arcade: could not measure the Arcade glass door leaves.");
                 return;
             }
 
-            Vector3 roomDoorCenter = roomDoor.position;
             Vector3 buildingDoorCenter = new(doorway.center.x, doorway.min.y, doorway.center.z);
             Vector3 along = AlongAxis(cornerDoor);
-            Vector3 inward = Flat(roomDoorCenter - buildingDoorCenter);
+            // Inward = towards the building centre, perpendicular to the chamfer.
+            Vector3 inward = Flat(building.position - buildingDoorCenter);
             inward = Flat(inward - along * Vector3.Dot(inward, along)).normalized;
-            float depth = Vector3.Dot(roomDoorCenter - buildingDoorCenter, inward);
-            if (depth < 0.6f || depth > 4f)
-            {
-                MelonLogger.Error($"Walk-in arcade: room door is {depth:0.00} m behind the building door (expected ~1.7 m); refusing to build a broken entrance.");
-                return;
-            }
 
-            // Only now, after every measurement passed, touch the vanilla building.
             Material? glass = FindTransparentGlass();
             Transform? sourceLeaf = FindVanillaGlassDoorLeaf(out string sourceName);
-            var buildingLeaves = new List<Leaf>();
+            var leaves = new List<Leaf>();
             int cloned = 0;
             foreach (var (door, model, box, leafBounds) in measured)
             {
                 DisableVanillaDoorInteraction(door);
                 HideVanillaLeaf(model);
-                // The vanilla leaf's own "Door" transform is the exact closed pose and its origin is
-                // the hinge edge (the leaf collider is offset half a leaf width from it).
                 Transform pose = box.transform.parent != null && box.transform.name == "Collider" ? box.transform.parent : box.transform;
-                Leaf? leaf = sourceLeaf != null ? CloneGlassLeaf(sourceLeaf, pose, model.gameObject.layer) : null;
+                Leaf? leaf = sourceLeaf != null ? CloneGlassLeaf(sourceLeaf, pose, model.gameObject.layer, doorway.center) : null;
                 if (leaf != null)
                     cloned++;
                 else
                     leaf = BuildFallbackLeaf(box, pose, model, doorway.center, glass);
-                buildingLeaves.Add(leaf);
+                leaves.Add(leaf);
             }
 
             float doorwayHalfWidth = HalfExtentAlong(doorway, along, buildingDoorCenter);
             float doorwayHeight = doorway.max.y - doorway.min.y;
-            float roomDoorHalfWidth = Vector3.Distance(Flat(hingeA.position), Flat(hingeB.position)) * 0.5f;
 
             OpenCornerDoorCollider(cornerDoor, doorway);
             ReplaceOpaqueGlass(cornerDoor, glass);
-            BuildEntranceFrame(buildingDoorCenter, along, inward, buildingLeaves, doorwayHeight);
+            BuildEntranceHead(buildingDoorCenter, along, inward, leaves, doorwayHeight);
 
-            var entrance = new DoorPair("ARCADE ENTRANCE", buildingDoorCenter + Vector3.up * 1.2f, buildingLeaves, inward);
-            var roomLeaves = new List<Leaf>
-            {
-                Leaf.ForHinge(hingeA),
-                Leaf.ForHinge(hingeB)
-            };
-            var room = new DoorPair("ARCADE DOOR", roomDoorCenter + Vector3.up * 1.2f, roomLeaves, inward);
-            _doors.Add(entrance);
-            _doors.Add(room);
-            foreach (DoorPair pair in _doors)
-                pair.Native = CreateNativeInteraction(pair, along, Mathf.Max(doorwayHalfWidth, roomDoorHalfWidth) * 2f, staticDoors[0]);
-
-            float floorRise = _location.RoomInstance.transform.position.y + 0.043f - buildingDoorCenter.y;
-            float panelTop = cornerDoor.GetComponent<BoxCollider>() is BoxCollider panelBox ? panelBox.bounds.max.y : buildingDoorCenter.y + 3.5f;
-            float vestibuleHeight = Mathf.Clamp(panelTop - buildingDoorCenter.y - 0.10f, 2.55f, ArcadeDimensions.InteriorCeilingHeight);
-            BuildVestibule(cornerDoor, buildingDoorCenter, along, inward, depth, Mathf.Max(doorwayHalfWidth, roomDoorHalfWidth) + 0.12f, doorwayHalfWidth, doorwayHeight, floorRise, vestibuleHeight, roomDoorHalfWidth, roomDoor);
+            _door = new DoorPair("ARCADE ENTRANCE", buildingDoorCenter + Vector3.up * 1.2f, leaves, inward);
+            _doors.Add(_door);
+            _door.Native = CreateNativeInteraction(_door, along, inward, doorwayHalfWidth * 2f, doorwayHeight, staticDoors[0]);
 
             CollectInteriorOccluders(building, buildingDoorCenter);
             HideStrayVanillaInsideRoom();
-            MelonLogger.Msg(cloned > 0
-                ? $"Walk-in entrance: {cloned} leaf/leaves cloned from the vanilla '{sourceName}' (PivotDoor glass door model, transparent glass); vestibule {vestibuleHeight:0.00} m high."
-                : $"Walk-in entrance: no unbatched vanilla glass PivotDoor leaf was loaded; built matching glass leaves with {(glass != null ? glass.name : "fallback")} glass.");
-
             _initialized = true;
-            MelonLogger.Msg($"Walk-in arcade ready: Arcade glass doors at {buildingDoorCenter} (opening {doorwayHalfWidth * 2f:0.00} m x {doorwayHeight:0.00} m), vestibule {depth:0.00} m deep, room door {roomDoorHalfWidth * 2f:0.00} m wide. No teleport is used.");
+            MelonLogger.Msg(cloned > 0
+                ? $"Walk-in entrance: ONE door pair, {cloned} leaf/leaves cloned from the vanilla '{sourceName}' (PivotDoor glass door model, transparent glass, black frame, bar handles)."
+                : $"Walk-in entrance: ONE door pair; no unbatched vanilla glass PivotDoor leaf was loaded, built matching glass leaves with {(glass != null ? glass.name : "fallback")} glass.");
+            MelonLogger.Msg($"Walk-in arcade ready: the Arcade glass doors at {buildingDoorCenter} (opening {doorwayHalfWidth * 2f:0.00} m x {doorwayHeight:0.00} m) open straight into the arcade floor (level threshold, no vestibule). Interact from either side; NPCs open it too. No teleport is used.");
         }
         catch (Exception ex)
         {
@@ -240,11 +209,12 @@ internal sealed class ArcadeWalkInService : IDisposable
             RequestToggle(_target);
 
         UpdateInteriorOccluders(position);
+        UpdateNpcDoorSensor(dt);
 
         foreach (DoorPair door in _doors)
         {
             float distance = Flat(door.InteractPoint - position).magnitude;
-            if (door.WantOpen && distance > AutoCloseDistance && !IsInsideArcade)
+            if (door.WantOpen && !_openedForNpc && distance > AutoCloseDistance && !IsInsideArcade)
             {
                 door.AwayTimer += dt;
                 if (door.AwayTimer > AutoCloseDelay)
@@ -262,17 +232,82 @@ internal sealed class ArcadeWalkInService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Mirrors the vanilla DoorSensor -> DoorController.NPCVicinityEnter behaviour of shop doors: any
+    /// NPC (citizens, police, employees) within ~2 m of the doorway on either side opens the door away
+    /// from it; once no NPC has been near for a moment, a door the NPCs opened closes again (never
+    /// through the player). Uses the game's own NPCManager.NPCRegistry.
+    /// </summary>
+    private void UpdateNpcDoorSensor(float dt)
+    {
+        if (_door == null)
+            return;
+        _npcScanTimer -= dt;
+        if (_npcScanTimer > 0f)
+            return;
+        _npcScanTimer = 0.2f;
+        Vector3? nearest = null;
+        float best = NpcOpenDistance;
+        try
+        {
+            var registry = Il2CppScheduleOne.NPCs.NPCManager.NPCRegistry;
+            if (registry != null)
+            {
+                for (int i = 0; i < registry.Count; i++)
+                {
+                    var npc = registry[i];
+                    if (npc == null || !npc.gameObject.activeInHierarchy || !npc.isVisible)
+                        continue;
+                    Vector3 p = npc.transform.position;
+                    if (Mathf.Abs(p.y - _door.InteractPoint.y) > 2.5f)
+                        continue;
+                    float d = Flat(p - _door.InteractPoint).magnitude;
+                    if (d < best) { best = d; nearest = p; }
+                }
+            }
+        }
+        catch
+        {
+            return;
+        }
+
+        if (nearest.HasValue)
+        {
+            _npcAwayTimer = 0f;
+            if (!_door.WantOpen)
+            {
+                _door.ChooseSwingAwayFrom(nearest.Value);
+                if (_door.InSwing(_playerPosition))
+                    _door.ChooseSwingAwayFrom(_playerPosition);
+                _door.WantOpen = true;
+                _openedForNpc = true;
+                _door.UpdateNativeMessage();
+            }
+        }
+        else if (_openedForNpc && _door.WantOpen)
+        {
+            _npcAwayTimer += 0.2f;
+            if (_npcAwayTimer > NpcCloseDelay && !_door.InSwing(_playerPosition))
+            {
+                _door.WantOpen = false;
+                _openedForNpc = false;
+                _door.UpdateNativeMessage();
+            }
+        }
+    }
+
     /// <summary>One interaction toggles both leaves; opening swings them away from the player.</summary>
     private void RequestToggle(DoorPair door)
     {
         // Native and fallback input can both see the same E press: one toggle per press.
         if (Time.frameCount - door.LastToggleFrame <= 1 || _blockingInteraction())
             return;
-        // Never swing a closing leaf through the player standing in the doorway.
-        bool inSwing = Flat(door.InteractPoint - _playerPosition).magnitude < 1.15f;
-        if (door.WantOpen && inSwing)
+        // Never swing a closing leaf through the player: only blocked when the player stands inside
+        // the leaves' swing arc, so closing from the far side works even pressed against the glass.
+        if (door.WantOpen && door.InSwing(_playerPosition))
             return;
         door.LastToggleFrame = Time.frameCount;
+        _openedForNpc = false;
         if (!door.WantOpen)
             door.ChooseSwingAwayFrom(_playerPosition);
         door.WantOpen = !door.WantOpen;
@@ -322,7 +357,7 @@ internal sealed class ArcadeWalkInService : IDisposable
     /// <summary>
     /// The building contains two renderer-only boxes ("arcade/Cube" and "arcade/Block", scaled
     /// 6 x 4.5 x 3.71 like the 12 x 9 m Foundation) that fake the interior when seen through the
-    /// windows. They have no colliders, but they would hide the vestibule when the doors are open,
+    /// windows. They have no colliders, but they would hide the arcade when the doors are open,
     /// so they are hidden only while the player is at the entrance or inside the building.
     /// </summary>
     private void CollectInteriorOccluders(Transform building, Vector3 entrance)
@@ -396,13 +431,24 @@ internal sealed class ArcadeWalkInService : IDisposable
             bool thinUpright = b.size.x <= 0.7f && b.size.z <= 0.7f;
             if (b.size.x > 3f || b.size.z > 3f || b.size.y > (known || thinUpright ? 5.0f : 3.5f))
                 continue;
-            Vector3 local = room.InverseTransformPoint(b.center);
-            Vector3 toward = new Vector3(-local.x, 0f, -local.z);
-            if (toward.sqrMagnitude > 0.0001f)
-                toward = toward.normalized * 0.35f;
-            Vector3 probed = local + toward;
-            bool inside = (local.y > 0.05f && RawArcadeSceneService.IsInsideInteriorLocal(local))
-                          || (known && probed.y > 0.05f && RawArcadeSceneService.IsInsideInteriorLocal(probed));
+            // Only objects lying ENTIRELY inside the arcade volume (all four footprint corners inside the
+            // interior and below the ceiling): exterior facade pieces, the sign, neon and the upper
+            // storey are never touched.
+            bool inside = true;
+            for (int c = 0; c < 4 && inside; c++)
+            {
+                Vector3 corner = new((c & 1) == 0 ? b.min.x : b.max.x, b.center.y, (c & 2) == 0 ? b.min.z : b.max.z);
+                Vector3 l = room.InverseTransformPoint(corner);
+                inside = ArcadeLayout.IsInsideInterior(l.x, l.z, -0.05f);
+            }
+            Vector3 lo = room.InverseTransformPoint(b.min), hi = room.InverseTransformPoint(b.max);
+            if (Mathf.Max(lo.y, hi.y) > ArcadeLayout.CeilingY + 0.05f || Mathf.Min(lo.y, hi.y) < ArcadeLayout.FloorTop - 0.3f)
+                inside = false;
+            if (known && !inside)
+            {
+                Vector3 local = room.InverseTransformPoint(b.center);
+                inside = local.y > 0.05f && local.y < ArcadeLayout.CeilingY && ArcadeLayout.IsInsideInterior(local.x, local.z, 0.05f);
+            }
             if (!inside)
                 continue;
             renderer.enabled = false;
@@ -460,27 +506,16 @@ internal sealed class ArcadeWalkInService : IDisposable
     {
         if (glass == null)
             return;
+        // Ground-floor window walls only ("WindowWall", "WindowWall (1)".."(4)"): their glass slot uses
+        // the opaque fake "window_opaque_material_1". The upper storey (UpperWindowWall*,
+        // CornerWindowWall) keeps its vanilla glass: there is no arcade up there to look into.
         int swapped = 0;
         foreach (MeshRenderer renderer in building.GetComponentsInChildren<MeshRenderer>(true))
         {
             if (renderer == null)
                 continue;
-            bool underWindow = false;
-            for (Transform? p = renderer.transform; p != null && p != building; p = p.parent)
-            {
-                string n = p.gameObject.name;
-                if (n.StartsWith("WindowWall", StringComparison.Ordinal) || n.StartsWith("CornerWindowWall", StringComparison.Ordinal)
-                    || n.StartsWith("UpperWindowWall", StringComparison.Ordinal) || n.StartsWith("LargeWindowFrame", StringComparison.Ordinal)
-                    || n.StartsWith("WindowFrame", StringComparison.Ordinal))
-                {
-                    underWindow = true;
-                    break;
-                }
-            }
-            if (!underWindow)
-                continue;
-            string rn = renderer.gameObject.name;
-            if (rn.IndexOf("glass", StringComparison.OrdinalIgnoreCase) < 0)
+            string n = renderer.gameObject.name;
+            if (!(n == "WindowWall" || n.StartsWith("WindowWall (", StringComparison.Ordinal)))
                 continue;
             Material[] original = renderer.sharedMaterials;
             Material[] replaced = (Material[])original.Clone();
@@ -490,7 +525,7 @@ internal sealed class ArcadeWalkInService : IDisposable
                 Material? mat = replaced[i];
                 if (mat == null || mat == glass)
                     continue;
-                if (mat.name.IndexOf("opaque", StringComparison.OrdinalIgnoreCase) >= 0 || mat.renderQueue < 2450)
+                if (mat.name.IndexOf("opaque", StringComparison.OrdinalIgnoreCase) >= 0 || mat.name.IndexOf("OpaqueGlass", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     replaced[i] = glass;
                     any = true;
@@ -504,8 +539,9 @@ internal sealed class ArcadeWalkInService : IDisposable
             _restore.Add(() => { if (captured != null) captured.sharedMaterials = restore; });
             swapped++;
         }
-        if (swapped > 0)
-            MelonLogger.Msg($"Walk-in entrance: applied see-through '{glass.name}' to {swapped} host-building window pane(s).");
+        MelonLogger.Msg(swapped > 0
+            ? $"Walk-in arcade: {swapped} ground-floor window wall(s) of Arcade (1) now use the game's clear '{glass.name}' (was window_opaque_material_1), so the lit arcade shows from the street."
+            : "Walk-in arcade: no opaque ground-floor window glass found to replace.");
     }
 
     private static Transform? FindBuilding()
@@ -669,7 +705,7 @@ internal sealed class ArcadeWalkInService : IDisposable
     }
 
     /// <summary>Clones the vanilla leaf into the exact closed pose of an Arcade door leaf.</summary>
-    private Leaf? CloneGlassLeaf(Transform source, Transform pose, int layer)
+    private Leaf? CloneGlassLeaf(Transform source, Transform pose, int layer, Vector3 doorwayCenter)
     {
         try
         {
@@ -677,7 +713,9 @@ internal sealed class ArcadeWalkInService : IDisposable
             _created.Add(clone);
             clone.name = "ARCADE_WALKIN_GLASS_LEAF";
             clone.transform.SetParent(null, false);
-            clone.transform.position = pose.position;
+            // Lifted 6 mm so the leaf's bottom edge clears the carpet (floor top is 3 mm above the
+            // foundation): nothing on the floor is inside the swing arc.
+            clone.transform.position = pose.position + Vector3.up * LeafLift;
             clone.transform.rotation = pose.rotation;
             clone.transform.localScale = pose.lossyScale;
             foreach (Transform t in clone.GetComponentsInChildren<Transform>(true))
@@ -708,6 +746,29 @@ internal sealed class ArcadeWalkInService : IDisposable
     }
 
     /// <summary>
+    /// A 35 mm black stile on the hinge edge of a leaf, outside the leaf (away from the doorway centre).
+    /// It rotates about the same hinge with the same angle, so it never collides with the wall lining
+    /// (the lining opening is 1.10 m either side of the centre; the stile reaches 1.085 m).
+    /// </summary>
+    private Leaf AddHingeStile(Leaf leaf, Vector3 doorwayCenter, float height)
+    {
+        Vector3 away = Flat(leaf.Hinge - doorwayCenter).normalized;
+        Vector3 size = new(0.04f, height, 0.035f);
+        var go = new GameObject("ARCADE_WALKIN_HINGE_STILE");
+        _created.Add(go);
+        go.transform.position = new Vector3(leaf.Hinge.x, leaf.ClosedBounds.min.y + height * 0.5f + LeafLift, leaf.Hinge.z) + away * (size.z * 0.5f);
+        go.transform.rotation = Quaternion.LookRotation(away, Vector3.up);
+        Mesh mesh = MetricBoxMesh.Create(size, "ScheduleIArcade_HingeStile");
+        mesh.vertices = ScaleVertices(mesh.vertices, size);
+        mesh.RecalculateBounds();
+        _created.Add(mesh);
+        go.AddComponent<MeshFilter>().sharedMesh = mesh;
+        go.AddComponent<MeshRenderer>().sharedMaterial = GameMaterialLibrary.Find("Doors Black", "postoffice_blacktrim_mat", "gas station black mat") ?? FallbackMaterial(new Color(0.03f, 0.03f, 0.035f, 1f));
+        // Same closed bounds as its leaf so SetSwingSide picks the same rotation sign.
+        return new Leaf(go.transform, leaf.ClosedBounds, Array.Empty<Collider>(), leaf.Hinge);
+    }
+
+    /// <summary>
     /// Fallback leaf in the vanilla leaf's exact pose, mimicking the liked shop door: black metal
     /// stiles/rails, 2 x 3 glass panes in transparent glass and a vertical bar handle.
     /// </summary>
@@ -720,7 +781,7 @@ internal sealed class ArcadeWalkInService : IDisposable
         var go = new GameObject("ARCADE_WALKIN_GLASS_LEAF");
         _created.Add(go);
         go.layer = model.gameObject.layer;
-        go.transform.position = t.TransformPoint(source.center);
+        go.transform.position = t.TransformPoint(source.center) + Vector3.up * LeafLift;
         go.transform.rotation = t.rotation;
         Transform root = go.transform;
 
@@ -803,13 +864,14 @@ internal sealed class ArcadeWalkInService : IDisposable
     }
 
     /// <summary>
-    /// Off-white jambs, head and a centre stop around the leaves: they overlap each leaf edge by a
-    /// couple of centimetres, so no street light shows between leaf and frame.
+    /// A black head above the leaves (out of the swing arc: it starts at the leaf top) and a centre
+    /// stop (astragal) that swings with the first leaf and covers the meeting-edge gap when closed.
+    /// The hinge-edge gaps are covered by stiles attached to each leaf (see CloneGlassLeaf).
     /// </summary>
-    private void BuildEntranceFrame(Vector3 doorCenter, Vector3 along, Vector3 inward, List<Leaf> leaves, float doorwayHeight)
+    private void BuildEntranceHead(Vector3 doorCenter, Vector3 along, Vector3 inward, List<Leaf> leaves, float doorwayHeight)
     {
-        Material frame = GameMaterialLibrary.Find("WindowFrame", "grocerystore_WindowFrame mat", "grocerystore_DoorFrame mat", "Trim", "metal_mediumlightgrey_mat") ?? FallbackMaterial(new Color(0.86f, 0.85f, 0.80f, 1f));
-        var root = new GameObject("ARCADE_WALKIN_ENTRANCE_FRAME");
+        Material frame = GameMaterialLibrary.Find("Doors Black", "postoffice_blacktrim_mat", "gas station black mat") ?? FallbackMaterial(new Color(0.03f, 0.03f, 0.035f, 1f));
+        var root = new GameObject("ARCADE_WALKIN_ENTRANCE_HEAD");
         _created.Add(root);
         root.transform.position = doorCenter;
         root.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
@@ -817,28 +879,23 @@ internal sealed class ArcadeWalkInService : IDisposable
         foreach (Leaf leaf in leaves)
             half = Mathf.Max(half, Mathf.Abs(Vector3.Dot(Flat(leaf.Hinge - doorCenter), along)));
         if (half < 0.3f)
-            half = 1.05f;
-        float alongSign = Vector3.Dot(root.transform.right, along) >= 0f ? 1f : -1f;
-        const float jamb = 0.075f, overlap = 0.02f, depth = 0.22f;
-        float height = doorwayHeight + 0.02f;
-        Piece(root.transform, "Jamb_A", new Vector3(alongSign * -(half + jamb * 0.5f - overlap), height * 0.5f, 0f), new Vector3(jamb, height + jamb, depth), frame, false);
-        Piece(root.transform, "Jamb_B", new Vector3(alongSign * (half + jamb * 0.5f - overlap), height * 0.5f, 0f), new Vector3(jamb, height + jamb, depth), frame, false);
-        Piece(root.transform, "Head", new Vector3(0f, height + jamb * 0.5f - overlap, 0f), new Vector3(half * 2f + jamb * 2f, jamb, depth), frame, false);
-        // Centre stop (astragal) on the street face covers the meeting-edge gap when closed. It is
-        // its own swinging piece on the first leaf's hinge, so it moves exactly with that leaf.
+            half = ArcadeLayout.LeafHalfSpan;
+        const float head = 0.06f, depth = 0.12f;
+        float bottom = doorwayHeight + 0.012f;
+        Piece(root.transform, "Head", new Vector3(0f, bottom + head * 0.5f, 0f), new Vector3(half * 2f + 0.07f, head, depth), frame, false);
         if (leaves.Count > 0)
         {
             var stop = new GameObject("ARCADE_WALKIN_CENTRE_STOP");
             _created.Add(stop);
-            Vector3 size = new(0.035f, height - 0.04f, 0.012f);
-            stop.transform.position = doorCenter + Vector3.up * (height * 0.5f) - inward * 0.035f;
+            Vector3 size = new(0.035f, doorwayHeight - 0.04f, 0.012f);
+            stop.transform.position = doorCenter + Vector3.up * (doorwayHeight * 0.5f + 0.006f) - inward * 0.035f;
             stop.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
             Mesh mesh = MetricBoxMesh.Create(size, "ScheduleIArcade_EntranceStop");
             mesh.vertices = ScaleVertices(mesh.vertices, size);
             mesh.RecalculateBounds();
             _created.Add(mesh);
             stop.AddComponent<MeshFilter>().sharedMesh = mesh;
-            stop.AddComponent<MeshRenderer>().sharedMaterial = GameMaterialLibrary.Find("Doors Black", "postoffice_blacktrim_mat", "gas station black mat") ?? frame;
+            stop.AddComponent<MeshRenderer>().sharedMaterial = frame;
             leaves.Add(new Leaf(stop.transform, new Bounds(stop.transform.position, size), Array.Empty<Collider>(), leaves[0].Hinge));
         }
     }
@@ -847,27 +904,38 @@ internal sealed class ArcadeWalkInService : IDisposable
     /// Native Schedule I prompt ("E  Open"/"Close") through the game's own InteractableObject on a
     /// trigger spanning the doorway. Returns null (custom prompt fallback) if this build rejects it.
     /// </summary>
-    private NativeDoorInteraction? CreateNativeInteraction(DoorPair pair, Vector3 along, float width, Il2CppScheduleOne.Doors.StaticDoor layerSource)
+    private NativeDoorInteraction? CreateNativeInteraction(DoorPair pair, Vector3 along, Vector3 inward, float width, float height, Il2CppScheduleOne.Doors.StaticDoor layerSource)
     {
         try
         {
-            var go = new GameObject("ARCADE_WALKIN_DOOR_INTERACTION_" + pair.Label.Replace(' ', '_'));
-            _created.Add(go);
-            go.SetActive(false);
-            go.layer = layerSource.IntObj != null ? layerSource.IntObj.gameObject.layer : layerSource.gameObject.layer;
-            go.transform.position = pair.InteractPoint - Vector3.up * 0.15f;
-            go.transform.rotation = Quaternion.LookRotation(Vector3.Cross(along, Vector3.up), Vector3.up);
-            var trigger = go.AddComponent<BoxCollider>();
-            trigger.isTrigger = true;
-            trigger.size = new Vector3(Mathf.Max(0.8f, width - 0.1f), 2.0f, 0.30f);
-            var intObj = go.AddComponent<Il2CppScheduleOne.Interaction.InteractableObject>();
-            intObj.MaxInteractionRange = DoorInteractDistance + 0.6f;
-            intObj.displayLocationPoint = go.transform;
-            var native = new NativeDoorInteraction(intObj);
-            intObj.onHovered.AddListener((UnityEngine.Events.UnityAction)new Action(() => native.LastHoveredFrame = Time.frameCount));
-            intObj.onInteractStart.AddListener((UnityEngine.Events.UnityAction)new Action(() => RequestToggle(pair)));
-            go.SetActive(true);
-            intObj.SetMessage("Open");
+            // One thin trigger on EACH face of the door, 0.16 m off the leaf plane and covering the whole
+            // door. A standing player's camera is always further from the glass than that (capsule
+            // radius), so the interact ray from either side hits that side's trigger before the glass
+            // or leaf colliders, and the player's capsule can never be inside it. The vanilla
+            // InteractableObject gives the native "E  Open/Close" prompt; both triggers drive one door.
+            var native = new NativeDoorInteraction();
+            int layer = layerSource.IntObj != null ? layerSource.IntObj.gameObject.layer : layerSource.gameObject.layer;
+            Vector3 centre = pair.InteractPoint - Vector3.up * 1.2f + Vector3.up * (height * 0.5f);
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var go = new GameObject("ARCADE_WALKIN_DOOR_INTERACTION_" + (side < 0f ? "STREET" : "INSIDE"));
+                _created.Add(go);
+                go.SetActive(false);
+                go.layer = layer;
+                go.transform.position = centre + inward * (0.16f * side);
+                go.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
+                var trigger = go.AddComponent<BoxCollider>();
+                trigger.isTrigger = true;
+                trigger.size = new Vector3(Mathf.Max(0.8f, width), Mathf.Max(1.8f, height), 0.04f);
+                var intObj = go.AddComponent<Il2CppScheduleOne.Interaction.InteractableObject>();
+                intObj.MaxInteractionRange = DoorInteractDistance + 0.6f;
+                intObj.displayLocationPoint = go.transform;
+                intObj.onHovered.AddListener((UnityEngine.Events.UnityAction)new Action(() => native.LastHoveredFrame = Time.frameCount));
+                intObj.onInteractStart.AddListener((UnityEngine.Events.UnityAction)new Action(() => RequestToggle(pair)));
+                go.SetActive(true);
+                intObj.SetMessage("Open");
+                native.Interactables.Add(intObj);
+            }
             return native;
         }
         catch (Exception ex)
@@ -961,81 +1029,6 @@ internal sealed class ArcadeWalkInService : IDisposable
         _restore.Add(() => { if (seal != null) seal.enabled = true; });
     }
 
-    private void BuildVestibule(Transform cornerDoor, Vector3 origin, Vector3 along, Vector3 inward, float depth, float halfWidth, float doorwayHalfWidth, float doorwayHeight, float floorRise, float height, float roomDoorHalfWidth, Transform roomDoor)
-    {
-        var root = new GameObject("ARCADE_WALKIN_VESTIBULE");
-        _created.Add(root);
-        root.transform.position = origin;
-        root.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
-        // Local axes: +Z = into the arcade, +X = along the building chamfer.
-
-        // Finish the corridor like the arcade interior it leads into (same wall finish as the room's
-        // own chamfer wall), with the game's ceiling, skirting and floor materials.
-        Material? roomWall = null;
-        Transform? roomShellWall = roomDoor.parent != null ? FindDeep(roomDoor.parent, "RawArcade_Wall_Chamfer_BeforeDoor") : null;
-        if (roomShellWall != null && roomShellWall.GetComponent<Renderer>() is Renderer shellRenderer)
-            roomWall = shellRenderer.sharedMaterial;
-        Material wall = roomWall
-            ?? GameMaterialLibrary.Find("Plaster1", "BackRoomWall", "Wall", "Walls1")
-            ?? cornerDoor.GetComponent<Renderer>()?.sharedMaterial
-            ?? FallbackMaterial(new Color(0.55f, 0.55f, 0.58f, 1f));
-        Material ceiling = GameMaterialLibrary.Find("Ceiling") ?? wall;
-        Material floor = GameMaterialLibrary.Find("Tiles", "Floor", "Concrete") ?? wall;
-        Material trim = GameMaterialLibrary.Find("Skirting", "Trim") ?? wall;
-
-        const float wallThickness = 0.12f;
-        float start = 0.04f;
-        // Run the side walls 12 cm into the room's chamfer wall so no gap shows at the far end.
-        float length = depth - start + 0.12f;
-        Piece(root.transform, "Vestibule_Wall_Left", new Vector3(-halfWidth - wallThickness * 0.5f, height * 0.5f, start + length * 0.5f), new Vector3(wallThickness, height, length), wall, true);
-        Piece(root.transform, "Vestibule_Wall_Right", new Vector3(halfWidth + wallThickness * 0.5f, height * 0.5f, start + length * 0.5f), new Vector3(wallThickness, height, length), wall, true);
-        Piece(root.transform, "Vestibule_Ceiling", new Vector3(0f, height + 0.05f, start + length * 0.5f), new Vector3(halfWidth * 2f + wallThickness * 2f, 0.10f, length), ceiling, true);
-
-        float rampLength = Mathf.Sqrt(depth * depth + floorRise * floorRise);
-        float rampAngle = Mathf.Atan2(floorRise, depth) * Mathf.Rad2Deg;
-        GameObject ramp = Piece(root.transform, "Vestibule_Floor", new Vector3(0f, floorRise * 0.5f - 0.05f, depth * 0.5f), new Vector3(halfWidth * 2f, 0.10f, rampLength + 0.10f), floor, true);
-        ramp.transform.localRotation = Quaternion.Euler(-rampAngle, 0f, 0f);
-
-        // Street-side lining around the building opening (visual only: stubs/lintel collide).
-        float liningZ = 0.16f;
-        float sideWidth = halfWidth - doorwayHalfWidth;
-        if (sideWidth > 0.02f)
-        {
-            Piece(root.transform, "Vestibule_Lining_Left", new Vector3(-(doorwayHalfWidth + sideWidth * 0.5f), height * 0.5f, liningZ), new Vector3(sideWidth, height, 0.03f), wall, false);
-            Piece(root.transform, "Vestibule_Lining_Right", new Vector3(doorwayHalfWidth + sideWidth * 0.5f, height * 0.5f, liningZ), new Vector3(sideWidth, height, 0.03f), wall, false);
-        }
-        if (height - doorwayHeight > 0.02f)
-            Piece(root.transform, "Vestibule_Lining_Lintel", new Vector3(0f, (doorwayHeight + height) * 0.5f, liningZ), new Vector3(doorwayHalfWidth * 2f, height - doorwayHeight, 0.03f), wall, false);
-
-        // Room-side lining: closes the strips between the room door frame and the corridor walls
-        // and the band above the room door, flush with the room's chamfer wall face.
-        float frameHalf = roomDoorHalfWidth + 0.105f;
-        float endZ = depth - 0.115f;
-        float roomFloor = floorRise;
-        float endSide = halfWidth - frameHalf;
-        if (endSide > 0.01f)
-        {
-            Piece(root.transform, "Vestibule_End_Left", new Vector3(-(frameHalf + endSide * 0.5f), roomFloor + (height - roomFloor) * 0.5f, endZ), new Vector3(endSide, height - roomFloor, 0.03f), wall, false);
-            Piece(root.transform, "Vestibule_End_Right", new Vector3(frameHalf + endSide * 0.5f, roomFloor + (height - roomFloor) * 0.5f, endZ), new Vector3(endSide, height - roomFloor, 0.03f), wall, false);
-        }
-        float roomDoorTop = roomFloor + 2.18f + 0.15f;
-        if (height - roomDoorTop > 0.02f)
-            Piece(root.transform, "Vestibule_End_Header", new Vector3(0f, (roomDoorTop + height) * 0.5f, endZ), new Vector3(halfWidth * 2f, height - roomDoorTop, 0.03f), wall, false);
-
-        Piece(root.transform, "Vestibule_Skirting_Left", new Vector3(-halfWidth + 0.015f, 0.06f + floorRise * 0.5f, start + length * 0.5f), new Vector3(0.03f, 0.12f, length), trim, false);
-        Piece(root.transform, "Vestibule_Skirting_Right", new Vector3(halfWidth - 0.015f, 0.06f + floorRise * 0.5f, start + length * 0.5f), new Vector3(0.03f, 0.12f, length), trim, false);
-
-        var lightGo = new GameObject("Vestibule_Light");
-        lightGo.transform.SetParent(root.transform, false);
-        lightGo.transform.localPosition = new Vector3(0f, height - 0.30f, depth * 0.5f);
-        Light light = lightGo.AddComponent<Light>();
-        light.type = LightType.Point;
-        light.range = 3.8f;
-        light.intensity = 1.4f;
-        light.color = new Color(1f, 0.9f, 0.78f, 1f);
-        light.shadows = LightShadows.None;
-    }
-
     private GameObject Piece(Transform parent, string name, Vector3 localPosition, Vector3 size, Material material, bool solid)
     {
         var go = new GameObject(name);
@@ -1065,7 +1058,7 @@ internal sealed class ArcadeWalkInService : IDisposable
     private Material FallbackMaterial(Color color)
     {
         Shader? shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-        var material = new Material(shader) { name = "ScheduleIArcade_M_VestibuleFallback" };
+        var material = new Material(shader) { name = "ScheduleIArcade_M_EntranceFallback" };
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
         if (material.HasProperty("_Color")) material.SetColor("_Color", color);
         _created.Add(material);
@@ -1166,12 +1159,7 @@ internal sealed class ArcadeWalkInService : IDisposable
 
     private sealed class NativeDoorInteraction
     {
-        public NativeDoorInteraction(Il2CppScheduleOne.Interaction.InteractableObject interactable)
-        {
-            Interactable = interactable;
-        }
-
-        public Il2CppScheduleOne.Interaction.InteractableObject Interactable { get; }
+        public List<Il2CppScheduleOne.Interaction.InteractableObject> Interactables { get; } = new();
         public int LastHoveredFrame { get; set; } = -1000;
     }
 
@@ -1197,19 +1185,40 @@ internal sealed class ArcadeWalkInService : IDisposable
         public bool NativeHoveredRecently => Native != null && Time.frameCount - Native.LastHoveredFrame <= 2;
         private float _open;
 
+        private float _swingSign = 1f;
+
+        /// <summary>
+        /// True when a capsule at <paramref name="p"/> overlaps the region the open leaves sweep while
+        /// closing (the half-disc of radius leaf + 0.45 m on the swing side, plus the door plane itself).
+        /// </summary>
+        public bool InSwing(Vector3 p)
+        {
+            Vector3 d = Flat(p - InteractPoint);
+            float through = Vector3.Dot(d, _throughAxis) * _swingSign;
+            Vector3 alongAxis = Vector3.Cross(Vector3.up, _throughAxis);
+            float alongOffset = Mathf.Abs(Vector3.Dot(d, alongAxis));
+            return through > -0.45f && through < ArcadeLayout.LeafHalfSpan + 0.45f && alongOffset < ArcadeLayout.LeafHalfSpan * 2f + 0.3f;
+        }
+
         /// <summary>Both leaves open away from the player (into the side the player is not on).</summary>
         public void ChooseSwingAwayFrom(Vector3 player)
         {
             float side = Vector3.Dot(Flat(player - InteractPoint), _throughAxis);
             Vector3 away = side <= 0f ? _throughAxis : -_throughAxis;
+            _swingSign = side <= 0f ? 1f : -1f;
             foreach (Leaf leaf in _leaves)
                 leaf.SetSwingSide(away, 88f);
         }
 
         public void UpdateNativeMessage()
         {
-            try { Native?.Interactable.SetMessage(WantOpen ? "Close" : "Open"); }
-            catch { }
+            if (Native == null)
+                return;
+            foreach (var interactable in Native.Interactables)
+            {
+                try { interactable.SetMessage(WantOpen ? "Close" : "Open"); }
+                catch { }
+            }
         }
 
         public void Animate(float step)
@@ -1256,15 +1265,8 @@ internal sealed class ArcadeWalkInService : IDisposable
         }
 
         public Transform Target => _target;
+        public Bounds ClosedBounds => _closedBounds;
         public Vector3 Hinge => _hinge;
-
-        /// <summary>A room-door leaf: its transform IS the hinge pivot at the frame edge.</summary>
-        public static Leaf ForHinge(Transform hinge)
-        {
-            Collider[] colliders = SolidColliders(hinge);
-            TryGetBounds(colliders, out Bounds bounds);
-            return new Leaf(hinge, bounds, colliders, hinge.position);
-        }
 
         public void SetSwingSide(Vector3 swingSide, float degrees)
         {

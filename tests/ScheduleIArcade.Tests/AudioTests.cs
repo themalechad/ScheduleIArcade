@@ -33,13 +33,13 @@ internal static class AudioTests
     public static void FalloffStopsAtStreet()
     {
         // Positions in metres, measured from level1 / the room layout (see tests/ArcadeGeometryCheck):
-        // room centre (-48.40, 141.40); building glass doorway (-45.11, 137.11);
-        // street point 2.5 m outside the doorway (-43.34, 135.34); Doom cabinet on the south wall ~(-45.96, 146.20).
+        // 0.6.0 room centre = building centre (-48.00, 141.50); building glass doorway (-45.11, 137.11);
+        // street point 2.5 m outside the doorway (-43.34, 135.34); nearest Doom cabinet ~(-44.80, 146.94).
         static float D(float ax, float az, float bx, float bz) => MathF.Sqrt((ax - bx) * (ax - bx) + (az - bz) * (az - bz));
-        float centreToCorner = D(0, 0, 3.19f, 4.02f);
-        float centreToDoorway = D(-48.40f, 141.40f, -45.11f, 137.11f);
-        float centreToStreet = D(-48.40f, 141.40f, -43.34f, 135.34f);
-        float cabinetToStreet = D(-45.96f, 146.20f, -43.34f, 135.34f);
+        float centreToCorner = D(0, 0, 4.2f, 5.7f);
+        float centreToDoorway = D(-48.00f, 141.50f, -45.11f, 137.11f);
+        float centreToStreet = D(-48.00f, 141.50f, -43.34f, 135.34f);
+        float cabinetToStreet = D(-44.80f, 146.94f, -43.34f, 135.34f);
 
         Console.WriteLine("      distance m : ambience gain | cabinet gain   (Unity Linear rolloff)");
         foreach (float d in new[] { 0.5f, 1f, 2f, 3f, 4f, 5f, 6f, 7f, 7.5f, 8f, 10f })

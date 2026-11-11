@@ -16,28 +16,28 @@ Current release: **v0.2.65**
 
 ### A complete arcade interior
 
-- A walk-in shop inside the real Northtown Arcade building, like the game's other shops: there is
-  **no teleport**. Look at the Arcade's glass corner doors and press `E` to open them, walk through
-  a short vestibule, and open the arcade's own double door the same way. Doors close by themselves
-  once you walk away. Leave the same way you came in.
-- The building's own glass door models swing open on hinges; the corner panel's sealing collider is
-  replaced at runtime by wall stubs and a lintel around the measured 2.15 m x 2.10 m doorway, and
-  everything is restored when the world unloads.
-- The vestibule (side walls, ceiling, a 4.9 degree ramp from street level up to the room floor) is
-  built from positions measured at runtime, so the path is continuous and collidable.
-- "Inside the arcade" (machine prompts, ambience, building) is decided by your position, not by a
-  teleport flag.
-- Interior floor, ceiling, skirting, trim and neon use Schedule I's own loaded materials (for
-  example `Carpet`, `Ceiling`, `Skirting`, `Trim` and the Arcade building's red/white neon), and
-  wall sconces reuse the building's own light fixture mesh. These are live references to assets the
-  game has already loaded: nothing from the game is extracted, packaged or committed.
-- The mural wall's single door is decorative; the old rear "west side" teleport exit was removed
-  because the 0.8 m gap behind that wall is not a walkable route.
+- The whole ground floor of the real Northtown Arcade building (`Map/Hyland Point/Region_Northtown/Arcade (1)`)
+  is the arcade: about 8.4 m x 11.5 m, flush against every exterior wall and window, ceiling at the
+  first-floor line (3.40 m clear). There is **no teleport and no vestibule**: look at the Arcade's
+  glass corner door, press `E`, and step straight onto the arcade floor. The threshold is level
+  with the sidewalk.
+- ONE entrance door set: leaves cloned at runtime from the game's own unbatched glass shop door
+  (transparent glass, black frame, bar handles) in the exact pose of the Arcade's corner-door leaves.
+  It opens and closes from both sides (even pressed against the glass), swings away from you, and
+  opens by itself for NPCs.
+- Every ground-floor window of the building uses the game's clear shop-window glass, so the lit
+  arcade shows from the street.
+- Walls are one solid layer (vanilla wall + interior lining, about 0.3 m), opaque from both sides;
+  carpet floor, dark wallpaper and ceiling tiles use Schedule I's own materials when loaded, or simple
+  in-code textures in the same style.
+- NPCs and police can walk in: the arcade floor gets a runtime navmesh linked to the sidewalk through
+  the door, with the machines as carved obstacles.
+- "Inside the arcade" (machine prompts, ambience, building) is decided by your position.
 
 ### Arcade lighting and ambience
 
-- Warm ceiling illumination without the old hanging light bars.
-- Cyan and magenta wall washes for a stronger arcade atmosphere.
+- Warm ceiling light fixtures (vanilla fluorescent fixtures when available) that light the room and
+  show through the windows.
 - Bright generated attract displays instead of out-of-place black screens.
 - A looping arcade ambience track that plays only while the player is inside.
 - Configurable ambience enable state, volume, and fade duration.
@@ -153,6 +153,20 @@ penetration and machine overlaps and can snap flush to the arcade's straight wal
 - `Tools/Build-LocalAssetPack.ps1` builds a curated pack from a local AssetRipper export into `Build/LocalAssets` (gitignored). `Tools/Package-Private.ps1` wraps that pack into a private ZIP that is never uploaded.
 - This fork's 0.5.0 public package (no ripped assets): https://github.com/themalechad/ScheduleIArcade/releases/tag/v0.5.0
 
+
+## 0.6.0 changes
+
+- **Whole building:** the interior now fills the entire ground floor of Arcade (1), sized from the building's measured walls (one solid ~0.3 m wall, no cavity, no back rooms), with a closed ceiling slab at the first-floor line (world y -0.50 underside / -0.40 top, 3.40 m clear; the roof is at 3.30). No second floor or stairs.
+- **One door, no tunnel:** the old inner double door and the vestibule/ramp are gone. The single vanilla-style glass door pair opens straight into the room, at a level threshold (floor = sidewalk, y -3.90), with nothing in its swing. Interaction triggers on both faces of the door work at close range; the door opens for NPCs.
+- **Windows:** all five ground-floor windows of Arcade (1) use the game's clear glass (they were an opaque fake), with nothing blocking the view in.
+- **Runtime vanilla assets:** live unbatched scene objects first, then `Resources.Load` of the game's buildable prefabs (for example the display cabinet used as a prize counter, LED/halogen lights), then the optional LocalAssets pack, then simple procedural substitutes. The public ZIP contains no game files.
+- **Textures:** carpet / dark wallpaper / ceiling tiles from the game's materials (procedural look-alikes as fallback). All of the old room and cabinet textures (blue noisy walls, neon patterns, checkerboard, neon cabinet skins) were removed from the package.
+- **Cabinets repainted** in Schedule I's flat, softly grimed style (Doom red/olive uprights, dusty-blue pinball bank, mustard Pac-Man table, off-white air hockey) with simple title plates.
+- **Doom screen:** the 640x400 picture is shown at 4:3 like an original CRT and fills the CRT opening measured on the cabinet mesh (35.0 x 33.8 cm opening -> 34.3 x 25.7 cm picture); the black bezel surrounds it and nothing is painted over it. The play camera frames the picture.
+- **Furniture removed:** benches, tables, stools, vending, fridge, jukebox, signs, plants, fans, chairs, bins, clock. Kept: Doom x2, Pac-Man (with its stools), four pinballs in one bank, air hockey, the Arcade TV console and the prize counter (+ register when one can be cloned).
+- **NPCs / police:** runtime navmesh for the arcade floor for every agent type, a navmesh link through the door, carved cabinet obstacles; the door opens for NPCs. Not verified in-game yet.
+- Geometry check extended (bounds vs the building, single floor, closed shell, one door, no vestibule, level threshold, swing arc, walkways, roof, game navmesh at the door).
+- This fork's 0.6.0 public package (no game files): https://github.com/themalechad/ScheduleIArcade/releases/tag/v0.6.0
 
 ## Installation
 
@@ -275,10 +289,11 @@ dotnet run -c Release --project tests\ScheduleIArcade.Tests
 dotnet run -c Release --project tests\ArcadeGeometryCheck -- "D:\SteamLibrary\steamapps\common\Schedule I"
 ```
 
-`ScheduleIArcade.Tests` runs the pinball simulation headlessly (launch, flipper impulse, colliders,
-tunnelling, closed side lanes, drain/relaunch, 10-240 Hz frame-rate independence) and measures the
-old v0.2.65 physics for comparison. `ArcadeGeometryCheck` reads the installed `level1` read-only and
-checks that the walk-in route from the street into the room is clear for a standing player.
+`ScheduleIArcade.Tests` runs the pinball, ghost, air hockey and audio logic headlessly and checks the
+0.6.0 layout, cabinet paint, procedural surfaces and the Doom CRT fit. `ArcadeGeometryCheck` reads the
+installed `level1` read-only: it re-measures the Arcade building, builds the same shell as the mod and
+checks the walk-in route, the single door, the level threshold, the door swing, 1.0 m walkways, the
+ceiling and that the game's NPC navmesh reaches the door.
 
 The script exports the Blender-authored layout, runs layout QA, compiles the mod, and writes the DLL
 to `Build/Release/ScheduleIArcade.dll`. A normal build also installs the DLL and runtime assets into
