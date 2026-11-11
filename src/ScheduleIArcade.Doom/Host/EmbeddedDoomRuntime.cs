@@ -40,7 +40,7 @@ namespace ScheduleIArcade.Doom
 
         public EmbeddedDoomRuntime(string iwadPath, string dataDirectory)
         {
-            if (string.IsNullOrEmpty(iwadPath) || !File.Exists(iwadPath))
+            if (string.IsNullOrEmpty(iwadPath) || !CanOpen(iwadPath))
             {
                 throw new FileNotFoundException("IWAD not found.", iwadPath);
             }
@@ -68,6 +68,22 @@ namespace ScheduleIArcade.Doom
             input = new EmbeddedUserInput(config);
             doom = new ManagedDoom.Doom(args, config, content, video, sound, null, input);
             IsRunning = true;
+        }
+
+        /// <summary>Symlink-safe existence check (opens the file; never trusts FileInfo.Length).</summary>
+        private static bool CanOpen(string path)
+        {
+            try
+            {
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    return stream.Length >= 12;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public string IwadPath { get; }

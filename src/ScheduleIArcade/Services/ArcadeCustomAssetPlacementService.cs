@@ -36,7 +36,7 @@ internal sealed class ArcadeCustomAssetPlacementService : IDisposable
         ("Pinball Machine 03", "Pinball Machine 3"),
         ("Pinball Machine 04", "Pinball Machine 4"),
         (Constants.CabinetPrefix + "PACMAN", "Pac-Man Cocktail Table"),
-        ("Air Hockey", "Air Hockey Table")
+        (Constants.CabinetPrefix + "AIRHOCKEY", "Air Hockey Table")
     };
 
     private const float PickupDistance = 2.35f;

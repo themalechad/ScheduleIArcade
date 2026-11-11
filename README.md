@@ -133,6 +133,16 @@ penetration and machine overlaps and can snap flush to the arcade's straight wal
   footprint, or fail wall-row alignment.
 - Ordinary layout editing does not require Unity Editor.
 
+## 0.4.1 changes
+
+- Vortex/symlink-safe file loading: WADs, the Doom engine DLL, textures, audio and the room package are opened and validated by content (IWAD header, stream length), never by `FileInfo.Length`, which is 0 for Vortex symlinks. Lookups are case-insensitive and relative to the MelonLoader Mods folder.
+- Entrance: glass door leaves cloned from the game's own "Basic Metal Glass Door" (transparent glass, black frame, bar handles) in the exact vanilla leaf pose, off-white jambs/head and a centre stop, see-through transom, doors swing away from the player, native `E Open/Close` prompt when available, finished vestibule.
+- Raised interior ceiling to 3.40 m; one flat floor collider; simple footprint box colliders on every machine; >= 1.0 m main walkways.
+- Back-corner clutter (panelled door, windows above it, white pipe) removed from the room mesh.
+- Pac-Man: native 224x288 screen fitted inside the table bezel and oriented to the player's end; side logos un-mirrored; arcade ghost AI (scatter/chase waves, per-ghost targeting, frightened, eyes, house release, Cruise Elroy).
+- Pinball: screen inset inside the rails and above the apron, baked 3D flippers hidden, working STAR GATE (capture, extra ball, 25,000 bonus, once per ball).
+- Air hockey: playable local two-player match.
+
 ## Installation
 
 ### Requirements
@@ -181,6 +191,7 @@ The standalone DLL download is intended for users who already have the matching
 | Pinball | Left arrow/`Z` and right arrow/`X` control flippers, `Space`/Up launches, `Esc` exits |
 | Doom I / Doom II | `WASD` or arrow keys play, `Esc` exits |
 | Arcade TV | Arrows navigate/play, `Enter`/`Space` selects, `Tab` returns to menu, `Esc` exits |
+| Air hockey (2 players, local) | Player 1 `W`/`A`/`S`/`D`, player 2 arrow keys; player 2 joins with `Enter`. $10 is charged only when the match starts. First to 7, `Enter` rematch, `Esc` exits. Not network-synced. |
 
 ## Optional Doom integration
 

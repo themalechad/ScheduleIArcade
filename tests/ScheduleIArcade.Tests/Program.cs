@@ -15,6 +15,19 @@ var tests = new (string Name, Action Body)[]
     ("arcade audio defaults are much quieter than v0.3.0 and follow the game's volume", AudioTests.DefaultsAreQuieter),
     ("arcade audio falloff is silent outside the building", AudioTests.FalloffStopsAtStreet),
     ("overlapping cabinet voices do not stack loudness", AudioTests.VoicesDoNotStack),
+    ("STAR GATE captures, awards EXTRA BALL + bonus, ejects, once per ball", StarGateTests.CaptureAwardEject),
+    ("STAR GATE is reachable from a left orbit shot", StarGateTests.ReachableFromThePlayfield),
+    ("pinball ball never leaves the visible rect / never under the rails", PinballViewTests.BallStaysInVisibleRect),
+    ("ghost targets: Blinky, Pinky (+up bug), Inky (+up bug), Clyde, corners", GhostTests.TargetSelection),
+    ("ghost intersections: no reverse, tie order, no-up zones, frightened random", GhostTests.IntersectionRules),
+    ("ghost scatter/chase wave timer (L1 7/20/7/20/5/20/5/inf, frightened pauses)", GhostTests.WaveTiming),
+    ("ghost house release, reversal, frightened/eyes, tunnel + Elroy speeds", GhostTests.ModesInPlay),
+    ("ghosts stay on legal tiles over two minutes of play", GhostTests.LongPlayInvariants),
+    ("air hockey rails and friction", AirHockeyTests.WallsAndFriction),
+    ("air hockey mallet hit transfers velocity", AirHockeyTests.MalletHitTransfersVelocity),
+    ("air hockey goals, serve and first-to-7", AirHockeyTests.GoalsAndMatch),
+    ("air hockey long random play invariants", AirHockeyTests.RandomPlayInvariants),
+    ("Vortex symlinked WAD is accepted (FileInfo.Length == 0)", SymlinkTests.VortexSymlinkedWadIsAccepted),
 };
 
 int failed = 0;

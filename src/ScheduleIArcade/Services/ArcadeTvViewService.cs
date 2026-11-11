@@ -28,6 +28,7 @@ internal sealed class ArcadeTvViewService
     private bool _phoneWasOpenable = true;
     private object? _playerInput;
     private bool _playerInputPaused;
+    private readonly List<Renderer> _hiddenForSession = new();
 
     public void Enter(ArcadeCabinet cabinet)
     {
@@ -121,6 +122,11 @@ internal sealed class ArcadeTvViewService
         if (_hud != null && _hud.HotbarContainer != null)
             _hud.HotbarContainer.gameObject.SetActive(_hotbarWasVisible);
 
+        foreach (Renderer hidden in _hiddenForSession)
+            if (hidden != null)
+                hidden.enabled = true;
+        _hiddenForSession.Clear();
+
         Cursor.lockState = _previousCursorLockState;
         Cursor.visible = _previousCursorVisible;
         _cabinet = null;
@@ -178,16 +184,47 @@ internal sealed class ArcadeTvViewService
 
         Vector3 screenCenter = cabinet.ScreenRenderer.bounds.center;
         bool cocktailTable = cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase);
+        bool airHockey = cabinet.Id.Equals("AIRHOCKEY", StringComparison.OrdinalIgnoreCase);
+        bool pinball = cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase);
         Vector3 cameraPosition;
         Quaternion cameraRotation;
         float fov;
         if (cocktailTable)
         {
-            // The cocktail screen is horizontal. Lock an overhead view with its texture's top
-            // pointed toward the player, like a real two-sided Pac-Man table.
-            cameraPosition = screenCenter + Vector3.up * 1.28f;
-            cameraRotation = Quaternion.LookRotation(Vector3.down, -cabinet.Root.transform.forward);
-            fov = 47f;
+            // Cocktail tables flip the picture for the player's end of the table: orient the
+            // portrait 224x288 screen so its top points away from whichever end the player stands
+            // at, then frame it from straight above at a distance that fits the whole picture.
+            Transform table = cabinet.Root.transform;
+            Vector3 viewer = Il2CppScheduleOne.PlayerScripts.PlayerCamera.Instance.transform.position;
+            bool seatAtPositiveX = table.InverseTransformPoint(viewer).x >= 0f;
+            Transform screen = cabinet.ScreenRenderer.transform;
+            screen.localRotation = PacmanScreenLayout.LocalRotation(seatAtPositiveX);
+            Vector3 far = table.TransformDirection(seatAtPositiveX ? Vector3.left : Vector3.right);
+            fov = 50f;
+            screenCenter = cabinet.ScreenRenderer.bounds.center;
+            cameraPosition = screenCenter + Vector3.up * FitDistance(PacmanScreenLayout.Height * 0.5f, PacmanScreenLayout.Width * 0.5f, fov);
+            cameraRotation = Quaternion.LookRotation(Vector3.down, far);
+        }
+        else if (airHockey)
+        {
+            // Top-down over the play surface with the table length across the screen. The overhead
+            // score arch and the static mallets/puck are hidden while the drawn match is played.
+            foreach (Renderer renderer in cabinet.Root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null || !renderer.enabled)
+                    continue;
+                string name = renderer.gameObject.name;
+                if (name == "AirHockey_Scoreboard" || name == "AirHockey_TablePieces")
+                {
+                    renderer.enabled = false;
+                    _hiddenForSession.Add(renderer);
+                }
+            }
+            Transform screen = cabinet.ScreenRenderer.transform;
+            fov = 50f;
+            Vector3 lossy = screen.lossyScale;
+            cameraPosition = screenCenter + Vector3.up * FitDistance(Mathf.Abs(lossy.y) * 0.5f, Mathf.Abs(lossy.x) * 0.5f, fov);
+            cameraRotation = Quaternion.LookRotation(Vector3.down, screen.up);
         }
         else
         {
@@ -206,9 +243,16 @@ internal sealed class ArcadeTvViewService
                 .normalized;
             if (viewingDirection.sqrMagnitude < 0.01f)
                 viewingDirection = cabinet.Root.transform.forward;
-            cameraPosition = screenCenter + viewingDirection * 1.10f + Vector3.up * 0.04f;
-            cameraRotation = Quaternion.LookRotation(screenCenter - cameraPosition, Vector3.up);
             fov = 56f;
+            float distance = 1.10f;
+            if (pinball)
+            {
+                // Fit the whole fitted playfield (flippers, drain and STAR GATE) in view.
+                var (width, length) = Games.Pinball.PinballPlayfieldMapping.QuadSize();
+                distance = FitDistance(length * 0.5f, width * 0.5f, fov);
+            }
+            cameraPosition = screenCenter + viewingDirection * distance + Vector3.up * 0.04f;
+            cameraRotation = Quaternion.LookRotation(screenCenter - cameraPosition, Vector3.up);
         }
 
         var camera = Il2CppScheduleOne.PlayerScripts.PlayerCamera.Instance;
@@ -217,5 +261,17 @@ internal sealed class ArcadeTvViewService
         camera.OverrideTransform(cameraPosition, cameraRotation, CameraTransitionSeconds, false);
         camera.OverrideFOV(fov, CameraTransitionSeconds);
         camera.LockMouse();
+    }
+
+    /// <summary>
+    /// Camera distance at which a screen of the given half extents (vertical/horizontal in the
+    /// camera view) fits the vertical field of view and the window aspect, with a small margin.
+    /// </summary>
+    private static float FitDistance(float halfVertical, float halfHorizontal, float verticalFov)
+    {
+        float tan = Mathf.Tan(verticalFov * 0.5f * Mathf.Deg2Rad);
+        float aspect = Screen.height > 0 ? Screen.width / (float)Screen.height : 16f / 9f;
+        float distance = Mathf.Max(halfVertical / tan, halfHorizontal / (tan * Mathf.Max(0.5f, aspect)));
+        return Mathf.Max(0.25f, distance * 1.12f);
     }
 }

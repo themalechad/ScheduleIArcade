@@ -141,7 +141,10 @@ internal enum PinballEventKind
     BallReturnedToPlunger,
     GameOver,
     StuckNudge,
-    Escaped
+    Escaped,
+    StarGateCapture,
+    StarGateEject,
+    ExtraBall
 }
 
 internal readonly struct PinballEvent
@@ -199,6 +202,18 @@ internal sealed class PinballSimulation
     public const float BallSaverSeconds = 3f;
     public const int BallsPerGame = 3;
 
+    // STAR GATE kick-out saucer, centred in the top orbit channel exactly where its label is drawn
+    // (text row y = 432..438). While lit it captures the ball, holds it, then kicks it out along the
+    // channel; collecting it awards an EXTRA BALL and a large bonus. It is lit at the start of a
+    // game and relit by completing the drop-target bank, and pays at most once per ball in play.
+    public const float StarGateX = 160f;
+    public const float StarGateY = 436f;
+    public const float StarGateCaptureRadius = 9f;
+    public const int StarGateBonus = 25000;
+    public const float StarGateSinkSeconds = 0.25f;
+    public const float StarGateHoldSeconds = 1.10f;
+    public const float StarGateEjectSpeed = 300f;
+
     private const float FlipperUpSpeed = 1400f; // degrees per second
     private const float FlipperDownSpeed = 900f;
     private const float StuckSpeed = 6f;
@@ -213,6 +228,8 @@ internal sealed class PinballSimulation
     private float _stuckTimer;
     private float _orbitCooldown;
     private bool _orbitArmed = true;
+    private float _gateTimer;
+    private Vec2 _gateEntry;
 
     public PinballSimulation()
     {
@@ -239,6 +256,9 @@ internal sealed class PinballSimulation
     public bool GameOver { get; private set; }
     public float BallSaver { get; private set; }
     public float SimulatedTime { get; private set; }
+    public bool StarGateLit { get; private set; }
+    public bool StarGateHolding { get; private set; }
+    public bool ExtraBallCollectedThisBall { get; private set; }
     public float CircleFlash(int index) => _circleCooldown[index];
     public float TargetFlash(int index) => _targetCooldown[index];
     public static Vec2 PlungerRestPosition => new((LaneLeft + Right) * 0.5f, PlungerY + WallRadius + BallRadius + 0.01f);
@@ -266,8 +286,13 @@ internal sealed class PinballSimulation
         RightFlipper.AngleDegrees = RightFlipper.RestDegrees;
         Array.Clear(_circleCooldown, 0, _circleCooldown.Length);
         Array.Clear(_targetCooldown, 0, _targetCooldown.Length);
+        StarGateLit = true;
+        StarGateHolding = false;
+        ExtraBallCollectedThisBall = false;
         PrepareBall();
     }
+
+    internal void SetStarGateLit(bool lit) => StarGateLit = lit;
 
     /// <summary>Advances by a real frame time. Time above <see cref="MaxFrameTime"/> (a hitch or a
     /// paused frame) is dropped; everything else is simulated in fixed steps.</summary>
@@ -342,6 +367,13 @@ internal sealed class PinballSimulation
             return;
         }
 
+        if (StarGateHolding)
+        {
+            StepStarGate(dt);
+            StepObserver?.Invoke(this);
+            return;
+        }
+
         BallSaver = MathF.Max(0f, BallSaver - dt);
 
         Vec2 velocity = Velocity + new Vec2(0f, -Gravity * dt);
@@ -364,6 +396,11 @@ internal sealed class PinballSimulation
 
         Velocity = Velocity.ClampLength(MaxSpeed);
         TrackOrbit();
+        if (TryCaptureStarGate())
+        {
+            StepObserver?.Invoke(this);
+            return;
+        }
         CheckStuck(dt);
         CheckDrainAndEscape();
         StepObserver?.Invoke(this);
@@ -501,6 +538,7 @@ internal sealed class PinballSimulation
             TargetsLit = 0;
             Multiplier = Math.Min(8, Multiplier + 1);
             AddScore(2500);
+            StarGateLit = true;
             Raise(PinballEventKind.TargetBankComplete);
         }
     }
@@ -524,6 +562,58 @@ internal sealed class PinballSimulation
             Raise(PinballEventKind.Orbit);
         }
     }
+
+    private bool TryCaptureStarGate()
+    {
+        if (!StarGateLit || ExtraBallCollectedThisBall)
+            return false;
+        Vec2 gate = new(StarGateX, StarGateY);
+        if ((Ball - gate).LengthSquared > StarGateCaptureRadius * StarGateCaptureRadius)
+            return false;
+
+        StarGateHolding = true;
+        StarGateLit = false;
+        ExtraBallCollectedThisBall = true;
+        _gateTimer = 0f;
+        _gateEntry = Ball;
+        Velocity = Vec2.Zero;
+        _stuckTimer = 0f;
+        Score += StarGateBonus;
+        Balls++;
+        Raise(PinballEventKind.StarGateCapture);
+        Raise(PinballEventKind.ExtraBall);
+        return true;
+    }
+
+    private void StepStarGate(float dt)
+    {
+        _gateTimer += dt;
+        Vec2 gate = new(StarGateX, StarGateY);
+        if (_gateTimer < StarGateSinkSeconds)
+        {
+            // Visibly roll into the saucer.
+            float t = _gateTimer / StarGateSinkSeconds;
+            Ball = _gateEntry + (gate - _gateEntry) * (t * t * (3f - 2f * t));
+            Velocity = Vec2.Zero;
+            return;
+        }
+
+        Ball = gate;
+        Velocity = Vec2.Zero;
+        if (_gateTimer < StarGateSinkSeconds + StarGateHoldSeconds)
+            return;
+
+        // Kick out to the left along the orbit channel; it drops down the left side.
+        StarGateHolding = false;
+        Ball = new Vec2(StarGateX - StarGateCaptureRadius - BallRadius - 1f, StarGateY);
+        Velocity = new Vec2(-StarGateEjectSpeed, 0f);
+        _stuckTimer = 0f;
+        Raise(PinballEventKind.StarGateEject);
+    }
+
+    /// <summary>True if a ball centred at <paramref name="p"/> is fully inside the rendered texture.</summary>
+    public static bool InsideVisibleRect(Vec2 p) =>
+        p.IsFinite && p.X - BallRadius >= 0f && p.X + BallRadius <= Width && p.Y + BallRadius <= Height && p.Y >= -BallRadius;
 
     private void CheckStuck(float dt)
     {
@@ -582,6 +672,7 @@ internal sealed class PinballSimulation
         }
 
         Balls--;
+        ExtraBallCollectedThisBall = false;
         if (Balls <= 0)
         {
             GameOver = true;
@@ -665,4 +756,61 @@ internal sealed class PinballSimulation
         _circles.Add(new PinballCircle("left pivot", new Vec2(96f, 74f), 6f, 0.3f, 0f, PinballCircleKind.Post));
         _circles.Add(new PinballCircle("right pivot", new Vec2(224f, 74f), 6f, 0.3f, 0f, PinballCircleKind.Post));
     }
+}
+
+/// <summary>
+/// Maps the 320 x 480 simulation/texture onto the pinball cabinet's visible playfield. Measured from
+/// the packaged "Pinball Machine" mesh (local metres, machines 01/02; 03/04 are the same mesh turned
+/// 180 degrees): the playfield is open between the left cabinet wall (z = -0.262), the inner edge of
+/// the right side-rail model (z = +0.170), the front apron/lockdown bar (x = -0.314) and the back
+/// wall under the backbox (x = +0.277). The screen quad is fitted INSIDE that rectangle at the
+/// texture's aspect, so no rail, apron or glass edge covers any part of the simulated table, and the
+/// flippers and drain sit fully above the apron.
+/// </summary>
+internal static class PinballPlayfieldMapping
+{
+    public const float InnerFrontX = -0.314f;
+    public const float InnerBackX = 0.277f;
+    public const float InnerLeftZ = -0.262f;
+    public const float InnerRightZ = 0.170f;
+    /// <summary>Clearance kept between the quad edge and any rail/apron, metres.</summary>
+    public const float Margin = 0.006f;
+
+    public static float AvailableLength => InnerBackX - InnerFrontX - 2f * Margin;
+    public static float AvailableWidth => InnerRightZ - InnerLeftZ - 2f * Margin;
+
+    /// <summary>Quad size (width across the table, length along it) fitted at the texture aspect.</summary>
+    public static (float width, float length) QuadSize()
+    {
+        float aspect = PinballSimulation.Width / PinballSimulation.Height; // width / length
+        float length = AvailableLength;
+        float width = length * aspect;
+        if (width > AvailableWidth)
+        {
+            width = AvailableWidth;
+            length = width / aspect;
+        }
+        return (width, length);
+    }
+
+    /// <summary>Quad centre in machine-local x/z (machines 01/02; negate both for 03/04).</summary>
+    public static (float x, float z) QuadCentre() => ((InnerFrontX + InnerBackX) * 0.5f, (InnerLeftZ + InnerRightZ) * 0.5f);
+
+    /// <summary>Texture UV of a simulation point (the quad shows the full texture, so UV == sim / size).</summary>
+    public static (float u, float v) SimToUv(Vec2 p) => (p.X / PinballSimulation.Width, p.Y / PinballSimulation.Height);
+
+    /// <summary>Machine-local (x along the table toward the backbox, z across) of a simulation point.</summary>
+    public static (float x, float z) SimToLocal(Vec2 p)
+    {
+        var (width, length) = QuadSize();
+        var (cx, cz) = QuadCentre();
+        var (u, v) = SimToUv(p);
+        // Texture V runs from the apron (v = 0, flippers/drain) to the backbox (v = 1); texture U
+        // runs across the table toward -z, the player's right where the plunger lane is drawn (the
+        // packaged mesh is mirrored, so its own plunger knob model sits on +z).
+        return (cx + (v - 0.5f) * length, cz - (u - 0.5f) * width);
+    }
+
+    public static bool LocalInsideRails(float x, float z) =>
+        x >= InnerFrontX && x <= InnerBackX && z >= InnerLeftZ && z <= InnerRightZ;
 }

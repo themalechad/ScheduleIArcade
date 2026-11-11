@@ -27,7 +27,7 @@ internal static class EmbeddedDoomBridge
 
     public static bool IsReady(DoomCabinetEdition edition, out string detail)
     {
-        if (!File.Exists(ModPaths.DoomEnginePath))
+        if (!ModPaths.Exists(ModPaths.DoomEnginePath))
         {
             detail = "The bundled Doom engine is missing: Mods/ScheduleIArcade/Doom/ScheduleIArcade.Doom.dll (reinstall the complete ZIP).";
             return false;
@@ -51,7 +51,7 @@ internal static class EmbeddedDoomBridge
         string[] own = edition == DoomCabinetEdition.Doom1 ? new[] { "DOOM.WAD", "DOOM1.WAD" } : new[] { "DOOM2.WAD" };
         foreach (string name in own)
         {
-            string path = Path.Combine(ModPaths.DoomRoot, name);
+            string path = ModPaths.Find(Path.Combine(ModPaths.DoomRoot, name));
             if (IsIwad(path))
             {
                 label = edition == DoomCabinetEdition.Doom1 ? "Doom (your WAD)" : "Doom II (your WAD)";
@@ -59,7 +59,7 @@ internal static class EmbeddedDoomBridge
             }
         }
 
-        string free = Path.Combine(ModPaths.DoomRoot, edition == DoomCabinetEdition.Doom1 ? "freedoom1.wad" : "freedoom2.wad");
+        string free = ModPaths.Find(Path.Combine(ModPaths.DoomRoot, edition == DoomCabinetEdition.Doom1 ? "freedoom1.wad" : "freedoom2.wad"));
         label = edition == DoomCabinetEdition.Doom1 ? "Freedoom: Phase 1" : "Freedoom: Phase 2";
         return IsIwad(free) ? free : null;
     }
@@ -74,7 +74,7 @@ internal static class EmbeddedDoomBridge
             {
                 Assembly? assembly = AppDomain.CurrentDomain.GetAssemblies()
                     .FirstOrDefault(a => string.Equals(a.GetName().Name, "ScheduleIArcade.Doom", StringComparison.OrdinalIgnoreCase))
-                    ?? Assembly.LoadFrom(ModPaths.DoomEnginePath);
+                    ?? LoadEngineAssembly(ModPaths.Find(ModPaths.DoomEnginePath));
                 Type? type = assembly.GetType("ScheduleIArcade.Doom.EmbeddedDoomRuntime", throwOnError: false);
                 object? api = type?.GetField("ApiVersion", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
                 if (type == null || api is not int version || version != ExpectedApiVersion)
@@ -92,22 +92,23 @@ internal static class EmbeddedDoomBridge
         return _runtimeType;
     }
 
-    private static bool IsIwad(string path)
+    /// <summary>
+    /// Loads the engine from bytes so a Vortex symlink (FileInfo.Length == 0, reparse point) can never
+    /// confuse the loader; falls back to LoadFrom if the bytes cannot be read.
+    /// </summary>
+    private static Assembly LoadEngineAssembly(string path)
     {
-        try
-        {
-            var info = new FileInfo(path);
-            if (!info.Exists || info.Length < 4096)
-                return false;
-            using var stream = File.OpenRead(path);
-            var header = new byte[4];
-            return stream.Read(header, 0, 4) == 4 && System.Text.Encoding.ASCII.GetString(header) == "IWAD";
-        }
-        catch
-        {
-            return false;
-        }
+        byte[]? bytes = Utils.ModFiles.ReadAllBytes(path);
+        if (bytes != null && bytes.Length > 0)
+            return Assembly.Load(bytes);
+        return Assembly.LoadFrom(path);
     }
+
+    /// <summary>
+    /// Symlink-safe IWAD check: opens the file and validates the stream length and the "IWAD" header.
+    /// Never uses FileInfo.Length (0 for Vortex-deployed SymbolicLink reparse points).
+    /// </summary>
+    internal static bool IsIwad(string path) => Utils.ModFiles.IsDoomWad(path, requireIwad: true);
 
     /// <summary>Thin typed wrapper over an EmbeddedDoomRuntime instance. Main thread only.</summary>
     internal sealed class Session : IDisposable

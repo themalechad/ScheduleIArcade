@@ -36,6 +36,8 @@ internal sealed class CabinetRegistryService
                 ? "arcade_tv"
                 : suffix.Equals("PACMAN", StringComparison.OrdinalIgnoreCase)
                     ? "pacman"
+                : suffix.Equals("AIRHOCKEY", StringComparison.OrdinalIgnoreCase)
+                    ? "air_hockey"
                     : suffix.Equals("01", StringComparison.OrdinalIgnoreCase)
                         ? "doom1"
                         : suffix.Equals("02", StringComparison.OrdinalIgnoreCase)
@@ -73,7 +75,7 @@ internal sealed class CabinetRegistryService
         Vector3 focus = cabinet.ScreenRenderer.bounds.center;
         if (cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
             focus.y += 0.46f;
-        else if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
+        else if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) || cabinet.Id.Equals("AIRHOCKEY", StringComparison.OrdinalIgnoreCase))
             focus.y += 0.34f;
         return focus;
     }
@@ -94,6 +96,8 @@ internal sealed class CabinetRegistryService
             size = new Vector3(1.20f, 0.72f, 1.16f);
         else if (cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase))
             size = new Vector3(1.45f, 0.62f, 1.20f);
+        else if (cabinet.Id.Equals("AIRHOCKEY", StringComparison.OrdinalIgnoreCase))
+            size = new Vector3(1.10f, 0.70f, 1.95f);
         else if (cabinet.Id.Equals("TV", StringComparison.OrdinalIgnoreCase))
             size = new Vector3(1.72f, 1.02f, 0.55f);
         else

@@ -1,6 +1,8 @@
 using UnityEngine;
 using MelonLoader;
 using ScheduleIArcade.Core;
+using ScheduleIArcade.Utils;
+using ScheduleIArcade.Games.Pacman;
 
 namespace ScheduleIArcade.Games;
 
@@ -12,13 +14,15 @@ namespace ScheduleIArcade.Games;
 /// </summary>
 internal sealed class PacmanCocktailGame : IArcadeGame
 {
-    private const int Width = 224;
-    private const int Height = 248;
-    private const int Columns = 28;
-    private const int Rows = 31;
-    private const int Cell = 7;
-    private const int OriginX = (Width - Columns * Cell) / 2;
-    private const int OriginY = 15;
+    // Native arcade resolution: 28 x 36 tiles of 8 px = 224 x 288 (portrait). The 28 x 31 maze sits
+    // between two status rows at the bottom and three score rows at the top, exactly like the cabinet.
+    public const int Width = 224;
+    public const int Height = 288;
+    private const int Columns = PacmanMaze.Columns;
+    private const int Rows = PacmanMaze.Rows;
+    private const int Cell = 8;
+    private const int OriginX = 0;
+    private const int OriginY = 16;
 
     private static readonly Color32 Black = new(2, 2, 8, 255);
     private static readonly Color32 MazeBlue = new(20, 72, 245, 255);
@@ -30,23 +34,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     private static readonly Color32 Red = new(255, 58, 72, 255);
     private static readonly Color32 Orange = new(255, 170, 48, 255);
     private static readonly Color32 Frightened = new(55, 72, 255, 255);
-
-    private sealed class Ghost
-    {
-        public Ghost(Vector2Int spawn, Color32 color)
-        {
-            Spawn = spawn;
-            Position = spawn;
-            PreviousPosition = spawn;
-            Color = color;
-        }
-
-        public Vector2Int Spawn { get; }
-        public Vector2Int Position { get; set; }
-        public Vector2Int PreviousPosition { get; set; }
-        public Vector2Int Direction { get; set; }
-        public Color32 Color { get; }
-    }
+    private static readonly Color32 DoorPink = new(255, 184, 222, 255);
 
     private enum GameState
     {
@@ -57,12 +45,11 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         LevelClear
     }
 
-    private readonly bool[,] _walls = new bool[Columns, Rows];
+    private readonly PacmanMaze _maze = new();
     private readonly HashSet<Vector2Int> _pellets = new();
     private readonly HashSet<Vector2Int> _powerPellets = new();
-    private readonly List<Ghost> _ghosts = new();
-    private readonly System.Random _random = new();
     private readonly List<Texture2D> _suppliedArt = new();
+    private PacmanGhostAi _ai = new(new PacmanMaze(), 1);
 
     private Texture2D? _texture;
     private Texture2D? _sourcePellet;
@@ -78,48 +65,9 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     private int _lives;
     private int _level;
     private float _stateTimer;
-    private float _playerTimer;
-    private float _ghostTimer;
-    private float _frightenedTimer;
+    private float _playerProgress;
     private float _nextDraw;
     private GameState _state;
-
-    // A complete 28x31 Pac-Man maze, stored top-to-bottom just like the supplied game's board.
-    // # is a wall, . a pellet, o an energizer, and blank cells are the ghost pen/tunnel lanes.
-    private static readonly string[] MazeRows =
-    {
-        "############################",
-        "#............##............#",
-        "#.####.#####.##.#####.####.#",
-        "#o####.#####.##.#####.####o#",
-        "#.####.#####.##.#####.####.#",
-        "#..........................#",
-        "#.####.##.########.##.####.#",
-        "#.####.##.########.##.####.#",
-        "#......##....##....##......#",
-        "######.#####.##.#####.######",
-        "     #.#####.##.#####.#     ",
-        "     #.##          ##.#     ",
-        "     #.##.###--###.##.#     ",
-        "######.##.#      #.##.######",
-        "      .   #      #   .      ",
-        "######.##.#      #.##.######",
-        "     #.##.########.##.#     ",
-        "     #.##          ##.#     ",
-        "     #.##.########.##.#     ",
-        "######.##.########.##.######",
-        "#............##............#",
-        "#.####.#####.##.#####.####.#",
-        "#.####.#####.##.#####.####.#",
-        "#o..##................##..o#",
-        "###.##.##.########.##.##.###",
-        "###.##.##.########.##.##.###",
-        "#......##....##....##......#",
-        "#.##########.##.##########.#",
-        "#.##########.##.##########.#",
-        "#..........................#",
-        "############################"
-    };
 
     public string Id => "pacman";
     public string DisplayName => "Pac-Man Cocktail Table";
@@ -138,7 +86,10 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         };
         _pixels = new Color32[Width * Height];
         LoadSuppliedPacmanVisuals();
-        BuildMaze();
+        _score = 0;
+        _lives = 3;
+        _level = 1;
+        StartLevel();
         DrawFrame();
     }
 
@@ -167,7 +118,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
                     _state = GameState.Playing;
                 break;
             case GameState.Playing:
-                TickPlaying(deltaTime);
+                TickPlaying(Mathf.Min(deltaTime, 0.1f));
                 break;
             case GameState.LevelClear:
                 _stateTimer -= deltaTime;
@@ -196,17 +147,6 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         }
     }
 
-    private void BuildMaze()
-    {
-        for (int y = 0; y < Rows; y++)
-        {
-            for (int x = 0; x < Columns; x++)
-            {
-                _walls[x, y] = MazeCell(x, y) == '#';
-            }
-        }
-    }
-
     private void StartLevel()
     {
         _pellets.Clear();
@@ -216,7 +156,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             for (int x = 0; x < Columns; x++)
             {
                 var cell = new Vector2Int(x, y);
-                char mazeCell = MazeCell(x, y);
+                char mazeCell = _maze.Cell(x, y);
                 if (mazeCell == '.')
                     _pellets.Add(cell);
                 else if (mazeCell == 'o')
@@ -224,11 +164,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             }
         }
 
-        _ghosts.Clear();
-        _ghosts.Add(new Ghost(new Vector2Int(12, 15), Red));
-        _ghosts.Add(new Ghost(new Vector2Int(13, 15), Pink));
-        _ghosts.Add(new Ghost(new Vector2Int(14, 15), Cyan));
-        _ghosts.Add(new Ghost(new Vector2Int(15, 15), Orange));
+        _ai = new PacmanGhostAi(_maze, _level, seed: 1 + _level);
         ResetPositions();
         _state = GameState.Ready;
         _stateTimer = 1.2f;
@@ -237,60 +173,45 @@ internal sealed class PacmanCocktailGame : IArcadeGame
 
     private void ResetPositions()
     {
-        _player = new Vector2Int(13, 7);
+        _player = new Vector2Int(PacmanMaze.PacmanStart.X, PacmanMaze.PacmanStart.Y);
         _playerPrevious = _player;
         _playerDirection = Vector2Int.left;
         _requestedDirection = _playerDirection;
-        _playerTimer = 0f;
-        _ghostTimer = 0f;
-        _frightenedTimer = 0f;
-        for (int i = 0; i < _ghosts.Count; i++)
-        {
-            _ghosts[i].Position = _ghosts[i].Spawn;
-            _ghosts[i].PreviousPosition = _ghosts[i].Spawn;
-            _ghosts[i].Direction = i % 2 == 0 ? Vector2Int.left : Vector2Int.right;
-        }
+        _playerProgress = 0f;
     }
 
     private void CaptureInput()
     {
-        if (Input.GetKeyDown(KeyCode.LeftArrow)) _requestedDirection = Vector2Int.left;
-        else if (Input.GetKeyDown(KeyCode.RightArrow)) _requestedDirection = Vector2Int.right;
-        else if (Input.GetKeyDown(KeyCode.UpArrow)) _requestedDirection = Vector2Int.up;
-        else if (Input.GetKeyDown(KeyCode.DownArrow)) _requestedDirection = Vector2Int.down;
+        if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A)) _requestedDirection = Vector2Int.left;
+        else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D)) _requestedDirection = Vector2Int.right;
+        else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W)) _requestedDirection = Vector2Int.up;
+        else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S)) _requestedDirection = Vector2Int.down;
     }
+
+    private static PacTile T(Vector2Int v) => new(v.x, v.y);
 
     private void TickPlaying(float deltaTime)
     {
-        _frightenedTimer = Mathf.Max(0f, _frightenedTimer - deltaTime);
-        _playerTimer += deltaTime;
-        float playerStep = Mathf.Max(0.070f, 0.115f - (_level - 1) * 0.004f);
-        while (_playerTimer >= playerStep)
+        float pacSpeed = PacmanGhostAi.PacmanSpeedFraction(_level, _ai.AnyFrightened) * PacmanGhostAi.FullSpeedTilesPerSecond;
+        _playerProgress += pacSpeed * deltaTime;
+        int guard = 0;
+        while (_playerProgress >= 1f && guard++ < 8)
         {
-            _playerTimer -= playerStep;
+            _playerProgress -= 1f;
             StepPlayer();
             ConsumeCurrentCell();
             if (_state != GameState.Playing)
                 return;
         }
 
-        _ghostTimer += deltaTime;
-        float ghostStep = Mathf.Max(0.082f, 0.145f - (_level - 1) * 0.003f);
-        while (_ghostTimer >= ghostStep)
-        {
-            _ghostTimer -= ghostStep;
-            for (int i = 0; i < _ghosts.Count; i++)
-                StepGhost(_ghosts[i]);
-            CheckGhostCollision();
-            if (_state != GameState.Playing)
-                return;
-        }
+        _ai.Update(deltaTime, T(_player), T(_playerDirection));
+        CheckGhostCollision();
     }
 
     private void StepPlayer()
     {
         _playerPrevious = _player;
-        if (TryGetOpenStep(_player, _requestedDirection, out Vector2Int requestedStep))
+        if (TryGetOpenStep(_player, _requestedDirection, out _))
             _playerDirection = _requestedDirection;
         if (TryGetOpenStep(_player, _playerDirection, out Vector2Int forwardStep))
             _player = forwardStep;
@@ -299,73 +220,41 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     private void ConsumeCurrentCell()
     {
         if (_pellets.Remove(_player))
+        {
             _score += 10;
+            _ai.OnDotEaten(energizer: false);
+        }
         if (_powerPellets.Remove(_player))
         {
             _score += 50;
-            _frightenedTimer = 6.0f;
+            _ai.OnDotEaten(energizer: true);
         }
         CheckGhostCollision();
-        if (_pellets.Count == 0 && _powerPellets.Count == 0)
+        if (_state == GameState.Playing && _pellets.Count == 0 && _powerPellets.Count == 0)
         {
             _state = GameState.LevelClear;
             _stateTimer = 1.8f;
         }
     }
 
-    private void StepGhost(Ghost ghost)
-    {
-        var choices = new List<Vector2Int>(4);
-        Vector2Int reverse = -ghost.Direction;
-        foreach (Vector2Int direction in Directions)
-        {
-            if (TryGetOpenStep(ghost.Position, direction, out _) && (direction != reverse || choices.Count == 0))
-                choices.Add(direction);
-        }
-        if (choices.Count == 0)
-            return;
-
-        Vector2Int directionChoice = choices[0];
-        if (_frightenedTimer > 0f)
-        {
-            directionChoice = choices[_random.Next(choices.Count)];
-        }
-        else
-        {
-            int bestDistance = int.MaxValue;
-            for (int i = 0; i < choices.Count; i++)
-            {
-                TryGetOpenStep(ghost.Position, choices[i], out Vector2Int probe);
-                int distance = Mathf.Abs(probe.x - _player.x) + Mathf.Abs(probe.y - _player.y);
-                if (distance < bestDistance || (distance == bestDistance && _random.NextDouble() < 0.18))
-                {
-                    bestDistance = distance;
-                    directionChoice = choices[i];
-                }
-            }
-        }
-        ghost.Direction = directionChoice;
-        if (TryGetOpenStep(ghost.Position, directionChoice, out Vector2Int nextPosition))
-        {
-            ghost.PreviousPosition = ghost.Position;
-            ghost.Position = nextPosition;
-        }
-    }
-
     private void CheckGhostCollision()
     {
-        for (int i = 0; i < _ghosts.Count; i++)
+        if (_state != GameState.Playing)
+            return;
+        PacTile pac = T(_player);
+        PacTile pacPrevious = T(_playerPrevious);
+        foreach (PacmanGhost ghost in _ai.Ghosts)
         {
-            Ghost ghost = _ghosts[i];
-            if (ghost.Position != _player)
+            if (ghost.State != GhostState.Active)
+                continue;
+            bool sameTile = ghost.Tile == pac;
+            bool crossed = ghost.Tile == pacPrevious && ghost.Previous == pac;
+            if (!sameTile && !crossed)
                 continue;
 
-            if (_frightenedTimer > 0f)
+            if (ghost.Frightened)
             {
-                _score += 200;
-                ghost.Position = ghost.Spawn;
-                ghost.PreviousPosition = ghost.Spawn;
-                ghost.Direction = Vector2Int.left;
+                _score += _ai.EatGhost(ghost);
                 continue;
             }
 
@@ -377,6 +266,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             }
             else
             {
+                _ai.ResetAfterLifeLost();
                 ResetPositions();
                 _state = GameState.Ready;
                 _stateTimer = 1.0f;
@@ -385,25 +275,13 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         }
     }
 
-    private bool IsOpen(Vector2Int position)
-        => position.x >= 0 && position.x < Columns && position.y >= 0 && position.y < Rows && !_walls[position.x, position.y];
-
-    private static char MazeCell(int x, int y) => MazeRows[Rows - 1 - y][x];
-
     private bool TryGetOpenStep(Vector2Int position, Vector2Int direction, out Vector2Int destination)
     {
-        destination = position + direction;
-        // The middle row is a proper wraparound tunnel rather than a dead edge. Other board
-        // edges are walled by the maze data, so this never lets a player leave the board.
-        if (destination.x < 0)
-            destination.x = Columns - 1;
-        else if (destination.x >= Columns)
-            destination.x = 0;
-
-        return IsOpen(destination);
+        PacTile next = _maze.Step(T(position), new PacTile(direction.x, direction.y));
+        destination = new Vector2Int(next.X, next.Y);
+        // The middle row is a wraparound tunnel; the house door and interior are closed to Pac-Man.
+        return _maze.IsOpenForActor(next);
     }
-
-    private static readonly Vector2Int[] Directions = { Vector2Int.left, Vector2Int.right, Vector2Int.up, Vector2Int.down };
 
     private void LoadSuppliedPacmanVisuals()
     {
@@ -428,8 +306,9 @@ internal sealed class PacmanCocktailGame : IArcadeGame
 
     private Texture2D? LoadSuppliedArt(string fileName)
     {
-        string path = Path.Combine(ModPaths.PacManAssetsRoot, fileName);
-        if (!File.Exists(path))
+        string path = ModPaths.Find(Path.Combine(ModPaths.PacManAssetsRoot, fileName));
+        byte[]? bytes = ModFiles.ReadAllBytes(path);
+        if (bytes == null || bytes.Length == 0)
             return null;
 
         try
@@ -440,7 +319,7 @@ internal sealed class PacmanCocktailGame : IArcadeGame
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp
             };
-            if (!ImageConversion.LoadImage(art, File.ReadAllBytes(path), false))
+            if (!ImageConversion.LoadImage(art, bytes, false))
             {
                 UnityEngine.Object.Destroy(art);
                 return null;
@@ -461,8 +340,11 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             return;
 
         Clear(Black);
-        DrawText("1UP " + _score.ToString("00000"), 10, 238, 1, White);
-        DrawText("LIVES " + _lives, 148, 238, 1, White);
+        // Score rows (top three tile rows) and status rows (bottom two) like the arcade screen.
+        DrawText("1UP", 16, Height - 9, 1, White);
+        DrawText(_score.ToString("00000"), 16, Height - 17, 1, White);
+        DrawText("LEVEL " + _level, 150, Height - 9, 1, White);
+        DrawText("LIVES " + _lives, 150, Height - 17, 1, White);
         DrawMaze();
         if (_state != GameState.GameOver)
         {
@@ -492,9 +374,16 @@ internal sealed class PacmanCocktailGame : IArcadeGame
             {
                 int px = OriginX + x * Cell;
                 int py = OriginY + y * Cell;
-                if (_walls[x, y])
+                char c = _maze.Cell(x, y);
+                if (c == '#')
                 {
                     FillRect(px, py, Cell, Cell, MazeBlue);
+                    FillRect(px + 2, py + 2, Cell - 4, Cell - 4, MazeInner);
+                    continue;
+                }
+                if (c == '-')
+                {
+                    FillRect(px, py + 3, Cell, 2, DoorPink);
                     continue;
                 }
 
@@ -503,17 +392,15 @@ internal sealed class PacmanCocktailGame : IArcadeGame
                 {
                     int pulse = (int)(Time.time * 5f) & 1;
                     if (_sourcePowerPellet != null)
-                        DrawSourceImage(_sourcePowerPellet, px + 2 - pulse, py + 2 - pulse, 5 + pulse * 2, 5 + pulse * 2);
+                        DrawSourceImage(_sourcePowerPellet, px + 1 - pulse, py + 1 - pulse, 6 + pulse * 2, 6 + pulse * 2);
                     else
-                        FillRect(px + 2 - pulse, py + 2 - pulse, 5 + pulse * 2, 5 + pulse * 2, White);
+                        FillRect(px + 1 - pulse, py + 1 - pulse, 6 + pulse * 2, 6 + pulse * 2, White);
                 }
                 else if (_pellets.Contains(point))
                 {
                     if (_sourcePellet != null)
-                        DrawSourceImage(_sourcePellet, px + 3, py + 3, 3, 3);
-                    // Always stamp a high-contrast two-pixel centre after source art. Some
-                    // source-pack pellets have nearly opaque dark edge pixels at this scale,
-                    // which made the pellet path disappear on the in-world table display.
+                        DrawSourceImage(_sourcePellet, px + 3, py + 3, 2, 2);
+                    // Always stamp a high-contrast centre so pellets never vanish at table distance.
                     FillRect(px + 3, py + 3, 2, 2, new Color32(255, 228, 184, 255));
                 }
             }
@@ -522,12 +409,9 @@ internal sealed class PacmanCocktailGame : IArcadeGame
 
     private void DrawPacMan()
     {
-        float playerStep = Mathf.Max(0.070f, 0.115f - (_level - 1) * 0.004f);
-        float stepProgress = Mathf.Clamp01(_playerTimer / playerStep);
-        float easedProgress = stepProgress * stepProgress * (3f - 2f * stepProgress);
         float renderProgress = Mathf.Abs(_player.x - _playerPrevious.x) > 1 || Mathf.Abs(_player.y - _playerPrevious.y) > 1
             ? 1f
-            : easedProgress;
+            : Mathf.Clamp01(_playerProgress);
         float cellX = Mathf.Lerp(_playerPrevious.x, _player.x, renderProgress);
         float cellY = Mathf.Lerp(_playerPrevious.y, _player.y, renderProgress);
         int cx = OriginX + Mathf.RoundToInt(cellX * Cell) + Cell / 2;
@@ -535,16 +419,16 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         Texture2D? sprite = _sourcePacmanSprites[(int)(Time.time * 10f) % _sourcePacmanSprites.Length];
         if (sprite != null)
         {
-            DrawSourceImage(sprite, cx - 4, cy - 4, 9, 9, _playerDirection == Vector2Int.left);
+            DrawSourceImage(sprite, cx - 6, cy - 6, 13, 13, _playerDirection == Vector2Int.left);
             return;
         }
 
         bool openMouth = ((int)(Time.time * 10f) & 1) == 0;
-        for (int y = -4; y <= 4; y++)
+        for (int y = -6; y <= 6; y++)
         {
-            for (int x = -4; x <= 4; x++)
+            for (int x = -6; x <= 6; x++)
             {
-                if (x * x + y * y > 18)
+                if (x * x + y * y > 40)
                     continue;
                 bool mouth = openMouth && ((_playerDirection == Vector2Int.right && x > 0 && Mathf.Abs(y) <= x / 2) ||
                     (_playerDirection == Vector2Int.left && x < 0 && Mathf.Abs(y) <= -x / 2) ||
@@ -556,41 +440,54 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         }
     }
 
+    private static Color32 GhostColour(GhostId id) => id switch
+    {
+        GhostId.Blinky => Red,
+        GhostId.Pinky => Pink,
+        GhostId.Inky => Cyan,
+        _ => Orange
+    };
+
     private void DrawGhosts()
     {
-        float ghostStep = Mathf.Max(0.082f, 0.145f - (_level - 1) * 0.003f);
-        float stepProgress = Mathf.Clamp01(_ghostTimer / ghostStep);
-        // Smooth the visual motion continuously between grid cells, while gameplay collision and
-        // pathing remain grid-exact. This keeps the supplied pixel ghosts crisp but removes the
-        // stop/start stepping that was visible at the old movement cadence.
-        float easedProgress = stepProgress * stepProgress * (3f - 2f * stepProgress);
-        for (int i = 0; i < _ghosts.Count; i++)
+        foreach (PacmanGhost ghost in _ai.Ghosts)
         {
-            Ghost ghost = _ghosts[i];
-            Vector2Int from = ghost.PreviousPosition;
-            Vector2Int to = ghost.Position;
+            PacTile from = ghost.Previous;
+            PacTile to = ghost.Tile;
             // A tunnel wrap should never animate a ghost straight across the full maze.
-            float renderProgress = Mathf.Abs(to.x - from.x) > 1 || Mathf.Abs(to.y - from.y) > 1
+            float renderProgress = Math.Abs(to.X - from.X) > 1 || Math.Abs(to.Y - from.Y) > 1
                 ? 1f
-                : easedProgress;
-            float cellX = Mathf.Lerp(from.x, to.x, renderProgress);
-            float cellY = Mathf.Lerp(from.y, to.y, renderProgress);
-            int x = OriginX + Mathf.RoundToInt(cellX * Cell) + 1;
-            int y = OriginY + Mathf.RoundToInt(cellY * Cell) + 1;
-            Color32 color = _frightenedTimer > 0f ? Frightened : ghost.Color;
-            Texture2D? sprite = _sourceGhostSprites[i % _sourceGhostSprites.Length];
-            if (sprite != null && _frightenedTimer <= 0f)
+                : Mathf.Clamp01(ghost.Progress);
+            float cellX = Mathf.Lerp(from.X, to.X, renderProgress);
+            float cellY = Mathf.Lerp(from.Y, to.Y, renderProgress);
+            int x = OriginX + Mathf.RoundToInt(cellX * Cell) - 2;
+            int y = OriginY + Mathf.RoundToInt(cellY * Cell) - 2;
+
+            bool eyesOnly = ghost.State == GhostState.Eaten || ghost.State == GhostState.EnteringHouse;
+            if (eyesOnly)
             {
-                DrawSourceImage(sprite, x, y, 8, 8);
+                FillRect(x + 2, y + 5, 4, 4, White);
+                FillRect(x + 7, y + 5, 4, 4, White);
+                FillRect(x + 3 + Math.Max(0, ghost.Direction.X), y + 6 + ghost.Direction.Y, 2, 2, MazeBlue);
+                FillRect(x + 8 + Math.Max(0, ghost.Direction.X), y + 6 + ghost.Direction.Y, 2, 2, MazeBlue);
                 continue;
             }
-            FillRect(x, y, 7, 6, color);
-            FillRect(x + 1, y + 6, 2, 1, color);
-            FillRect(x + 4, y + 6, 2, 1, color);
-            FillRect(x + 1, y + 3, 2, 2, White);
-            FillRect(x + 4, y + 3, 2, 2, White);
-            SetPixel(x + 2, y + 3, MazeInner);
-            SetPixel(x + 5, y + 3, MazeInner);
+
+            bool flashing = ghost.Frightened && _ai.FrightenedTimeLeft < 2f && ((int)(Time.time * 6f) & 1) == 0;
+            Color32 color = ghost.Frightened ? (flashing ? White : Frightened) : GhostColour(ghost.Id);
+            Texture2D? sprite = _sourceGhostSprites[(int)ghost.Id % _sourceGhostSprites.Length];
+            if (sprite != null && !ghost.Frightened)
+            {
+                DrawSourceImage(sprite, x, y, 12, 12);
+                continue;
+            }
+            FillRect(x + 1, y + 3, 10, 8, color);
+            FillRect(x + 3, y + 11, 6, 1, color);
+            FillRect(x + 1, y + 2, 2, 1, color);
+            FillRect(x + 4, y + 2, 4, 1, color);
+            FillRect(x + 9, y + 2, 2, 1, color);
+            FillRect(x + 3, y + 7, 2, 2, ghost.Frightened ? Pink : White);
+            FillRect(x + 7, y + 7, 2, 2, ghost.Frightened ? Pink : White);
         }
     }
 
@@ -598,9 +495,10 @@ internal sealed class PacmanCocktailGame : IArcadeGame
     {
         int width = TextWidth(text, 2) + 18;
         int x = (Width - width) / 2;
-        FillRect(x, 116, width, 24, new Color32(0, 0, 0, 230));
-        DrawRect(x, 116, width, 24, color, 1);
-        DrawTextCentered(text, 124, 2, color);
+        // Centred on the row below the ghost house, where the arcade prints READY!
+        FillRect(x, 108, width, 24, new Color32(0, 0, 0, 230));
+        DrawRect(x, 108, width, 24, color, 1);
+        DrawTextCentered(text, 116, 2, color);
     }
 
     private void Clear(Color32 color)
@@ -723,6 +621,6 @@ internal sealed class PacmanCocktailGame : IArcadeGame
         Array.Clear(_sourceGhostSprites, 0, _sourceGhostSprites.Length);
         _pellets.Clear();
         _powerPellets.Clear();
-        _ghosts.Clear();
+
     }
 }

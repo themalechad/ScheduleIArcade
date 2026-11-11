@@ -55,7 +55,34 @@ internal sealed class RawArcadeSceneService : IDisposable
     private const float RequestedDoorHeight = 2.18f;
     private float _doorT = RequestedChamferDoorT;
 
-    public bool IsAvailable => File.Exists(ModPaths.RawSceneMeshPath);
+    // Raised interior (0.4.1): ceiling plane, generated wall height and wall centre, room-local metres.
+    private const float CeilingY = ArcadeDimensions.InteriorCeilingHeight;
+    private const float WallHeight = ArcadeDimensions.InteriorWallHeight;
+    private const float WallCenterY = WallHeight * 0.5f;
+    /// <summary>Top of the walkable floor (the visible checkerboard plane).</summary>
+    private const float FloorTopY = 0.043f;
+
+    // Default layout overrides that keep >= 1.0 m walkways: Pac-Man table <-> air hockey <-> east wall.
+    private const float PacmanTableX = -0.27f;
+    private const float AirHockeyX = 1.67f;
+
+    /// <summary>
+    /// Environment islands removed at load (source-mesh coordinates, before the footprint stretch):
+    /// the free-standing white floor-to-ceiling pipe and the old black panelled door in the back
+    /// corner beside the Street Fighter art, plus the dark window pair above that door. Only whole
+    /// connected pieces that lie entirely inside a box are removed; the room shell is untouched.
+    /// </summary>
+    private static readonly (string label, Vector3 min, Vector3 max)[] EnvironmentClutter =
+    {
+        ("back-corner pipe", new Vector3(2.37f, -0.02f, -2.88f), new Vector3(2.54f, 2.74f, -2.70f)),
+        ("back-corner panelled door", new Vector3(2.43f, -0.01f, -2.84f), new Vector3(2.61f, 1.97f, -1.76f)),
+        ("windows above the back-corner door", new Vector3(2.47f, 1.94f, -2.19f), new Vector3(2.59f, 2.60f, -1.11f)),
+    };
+
+    /// <summary>Static 3D flipper meshes baked on the pinball playfield (machines 01/02; 03/04 mirrored).</summary>
+    private static readonly (Vector3 min, Vector3 max) PinballStaticFlippers = (new Vector3(-0.385f, -0.035f, -0.09f), new Vector3(-0.315f, 0.005f, 0.09f));
+
+    public bool IsAvailable => ModPaths.Exists(ModPaths.RawSceneMeshPath);
 
     public bool TryPopulate(GameObject root, out Transform? spawnMarker, out Transform? exitMarker)
     {
@@ -68,7 +95,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         try
         {
             LoadOptionalBlenderLayout();
-            using var stream = File.OpenRead(ModPaths.RawSceneMeshPath);
+            using var stream = new MemoryStream(ModFiles.ReadAllBytes(ModPaths.Find(ModPaths.RawSceneMeshPath)) ?? Array.Empty<byte>());
             using var reader = new BinaryReader(stream);
 
             ValidateHeader(reader);
@@ -110,10 +137,8 @@ internal sealed class RawArcadeSceneService : IDisposable
             // room a clearer arcade-style floor instead of reusing the wall texture.
             CreateCheckerboardOverlayFloor(root.transform);
 
-            // Keep a thick hidden physical floor directly under the imported visible floor. This
-            // gives the CharacterController a reliable landing surface even if the decorative
-            // environment MeshCollider has tiny seams.
-            CreateSafetyFloor(root.transform);
+            // One flat, seamless walkable floor collider at the visible floor plane.
+            CreateWalkableFloor(root.transform);
 
             // Replace the old single-door setup with a purpose-built double entrance on the
             // blank wall requested in testing. The entire room is later rotated so entering
@@ -130,6 +155,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             {
                 CreateCabinetScreens(root.transform);
                 CreatePinballTableScreens(root.transform);
+                CreateAirHockeyScreen(root.transform);
             }
             catch (Exception screenEx)
             {
@@ -155,12 +181,13 @@ internal sealed class RawArcadeSceneService : IDisposable
     private void LoadOptionalBlenderLayout()
     {
         _doorT = RequestedChamferDoorT;
-        if (!File.Exists(ModPaths.RawSceneLayoutPath))
+        string layoutPath = ModPaths.Find(ModPaths.RawSceneLayoutPath);
+        if (!ModPaths.Exists(layoutPath))
             return;
 
         try
         {
-            foreach (string rawLine in File.ReadAllLines(ModPaths.RawSceneLayoutPath))
+            foreach (string rawLine in ModFiles.ReadAllLines(layoutPath))
             {
                 string line = rawLine.Trim();
                 if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
@@ -272,6 +299,46 @@ internal sealed class RawArcadeSceneService : IDisposable
             triangles[i] = index;
         }
 
+        bool isAirHockey = modelName.Equals("Air Hockey", StringComparison.OrdinalIgnoreCase);
+        var splitParts = new List<(string name, int[] triangles)>();
+        if (isEnvironment)
+        {
+            // Boxes were measured in source coordinates; south of the chamfer the footprint stretch
+            // is a plain scale, so the stretched boxes match the stretched vertices exactly.
+            triangles = MeshIslands.RemoveIslandsInside(vertices, triangles, EnvironmentClutter.Select(c => (c.label, MapBox(c.min), MapBox(c.max))).ToArray(), out string removed);
+            if (removed.Length > 0)
+                MelonLogger.Msg($"Removed environment clutter: {removed}.");
+        }
+        else if (modelName.StartsWith("Pinball Machine", StringComparison.OrdinalIgnoreCase))
+        {
+            // The 2D table draws and animates its own flippers; the dark static 3D flippers on the
+            // cabinet model would show a second, frozen pair.
+            Vector3 fMin = PinballStaticFlippers.min, fMax = PinballStaticFlippers.max;
+            var boxes = new[]
+            {
+                ("static flippers", fMin, fMax),
+                ("static flippers (mirrored)", new Vector3(-fMax.x, fMin.y, -fMax.z), new Vector3(-fMin.x, fMax.y, -fMin.z)),
+            };
+            triangles = MeshIslands.RemoveIslandsInside(vertices, triangles, boxes, out string removed);
+            if (removed.Length > 0)
+                MelonLogger.Msg($"{modelName}: hid the baked 3D flipper meshes ({removed}).");
+        }
+        else if (modelName.Equals("Table Top", StringComparison.OrdinalIgnoreCase))
+        {
+            int flipped = PacmanLogoFix.FlipLogoReadingAxis(ref vertices, ref normals, ref uvs, triangles);
+            if (flipped > 0)
+                MelonLogger.Msg($"Pac-Man table: un-mirrored both PAC-MAN side logos ({flipped} triangle(s)).");
+        }
+        else if (isAirHockey)
+        {
+            // Split the overhead score arch/display and the loose mallets + puck off the table body so
+            // the top-down session camera can see the play surface and the drawn pieces are not doubled.
+            triangles = MeshIslands.Split(vertices, triangles, island =>
+                island.min.y > -0.12f && island.max.y > 0.30f ? "AirHockey_Scoreboard"
+                : (island.max - island.min).magnitude < 0.16f && island.min.y > -0.06f && island.max.y < 0.03f ? "AirHockey_TablePieces"
+                : null, splitParts);
+        }
+
         var mesh = new Mesh { name = "ScheduleIArcade_" + modelName };
         mesh.vertices = vertices;
         mesh.normals = normals;
@@ -298,6 +365,10 @@ internal sealed class RawArcadeSceneService : IDisposable
         {
             runtimeName = Constants.CabinetPrefix + "PACMAN";
         }
+        else if (isAirHockey)
+        {
+            runtimeName = Constants.CabinetPrefix + "AIRHOCKEY";
+        }
 
         var go = new GameObject(runtimeName);
         go.transform.SetParent(parent, false);
@@ -306,6 +377,10 @@ internal sealed class RawArcadeSceneService : IDisposable
         {
             if (packageVersion >= 2)
             {
+                if (isPacmanCocktail)
+                    authoredPosition.x = PacmanTableX;
+                else if (isAirHockey)
+                    authoredPosition.x = AirHockeyX;
                 go.transform.localPosition = authoredPosition;
                 go.transform.localRotation = Quaternion.Euler(0f, authoredYaw, 0f);
             }
@@ -343,6 +418,21 @@ internal sealed class RawArcadeSceneService : IDisposable
         renderer.sharedMaterial = material;
         _materialByModel[modelName] = material;
 
+        foreach (var (partName, partTriangles) in splitParts)
+        {
+            var partMesh = new Mesh { name = "ScheduleIArcade_" + partName };
+            partMesh.vertices = vertices;
+            partMesh.normals = normals;
+            partMesh.uv = uvs;
+            partMesh.triangles = partTriangles;
+            partMesh.RecalculateBounds();
+            _meshes.Add(partMesh);
+            var part = new GameObject(partName);
+            part.transform.SetParent(go.transform, false);
+            part.AddComponent<MeshFilter>().sharedMesh = partMesh;
+            part.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
         bool isFakeVending = modelName.Equals("Vendind Machine", StringComparison.OrdinalIgnoreCase);
         bool isOutOfOrderCoinMachine = modelName.Equals("Crane Game", StringComparison.OrdinalIgnoreCase);
         if (isFakeVending || isOutOfOrderCoinMachine)
@@ -352,53 +442,48 @@ internal sealed class RawArcadeSceneService : IDisposable
         else if (!isEnvironment)
         {
             Bounds bounds = mesh.bounds;
+            float floorLocalY = FloorTopY - go.transform.localPosition.y;
             if (isPinballMachine)
             {
-                CreatePinballSmoothColliders(go.transform, bounds);
+                // One inset footprint box, 1.0 m tall: no capsules, no legs/plunger/backbox detail.
+                AddFootprintCollider(go.transform, "ARCADE_COLLIDER_PINBALL", bounds.center, new Vector2(bounds.size.x - 0.08f, bounds.size.z - 0.08f), floorLocalY, ArcadeDimensions.PinballColliderHeight);
+            }
+            else if (isPacmanCocktail)
+            {
+                // Table body only (x -0.80..0.70 in the mesh) plus one small box per end stool.
+                AddFootprintCollider(go.transform, "ARCADE_COLLIDER_PACMAN_TABLE", new Vector3(-0.05f, 0f, 0f), new Vector2(1.42f, 0.92f), floorLocalY, 0.66f);
+                AddFootprintCollider(go.transform, "ARCADE_COLLIDER_PACMAN_STOOL_A", new Vector3(-1.05f, 0f, 0f), new Vector2(0.30f, 0.30f), floorLocalY, 0.30f);
+                AddFootprintCollider(go.transform, "ARCADE_COLLIDER_PACMAN_STOOL_B", new Vector3(1.05f, 0f, 0f), new Vector2(0.30f, 0.30f), floorLocalY, 0.30f);
             }
             else
             {
-                var collider = go.AddComponent<BoxCollider>();
-                const float horizontalInset = 0.10f;
-                Vector3 size = bounds.size;
-                size.x = Mathf.Max(0.18f, size.x - horizontalInset * 2f);
-                size.z = Mathf.Max(0.18f, size.z - horizontalInset * 2f);
-                collider.center = bounds.center;
-                collider.size = size;
+                const float horizontalInset = 0.06f;
+                float height = Mathf.Min(bounds.max.y - floorLocalY, 1.6f);
+                if (isAirHockey)
+                {
+                    // Table body only (x +-0.47, z +-0.92); the score arch overhangs it.
+                    AddFootprintCollider(go.transform, "ARCADE_COLLIDER_AIRHOCKEY", Vector3.zero, new Vector2(0.90f, 1.80f), floorLocalY, 1.0f);
+                }
+                else
+                {
+                    AddFootprintCollider(go.transform, "ARCADE_COLLIDER_" + (isArcadeCabinet ? "CABINET" : "PROP"), bounds.center,
+                        new Vector2(bounds.size.x - horizontalInset * 2f, bounds.size.z - horizontalInset * 2f), floorLocalY, height);
+                }
             }
         }
     }
 
-    private static void CreatePinballSmoothColliders(Transform parent, Bounds bounds)
+    /// <summary>Simple upright box collider from the walkable floor up to <paramref name="height"/>.</summary>
+    private static void AddFootprintCollider(Transform parent, string name, Vector3 center, Vector2 footprint, float floorLocalY, float height)
     {
-        // The old full-mesh box enclosed the legs, backbox and empty space as one sharp block.
-        // In the close rows that could pinch a CharacterController until the player jumped.
-        // Two overlapping vertical capsules follow the lower body with rounded edges.
-        Vector3 size = bounds.size;
-        float shortSpan = Mathf.Min(size.x, size.z);
-        float longSpan = Mathf.Max(size.x, size.z);
-        float radius = Mathf.Clamp(shortSpan * 0.31f, 0.14f, 0.22f);
-        float height = Mathf.Clamp(size.y * 0.62f, 0.72f, 1.02f);
-        height = Mathf.Max(height, radius * 2f);
-        float offset = Mathf.Max(0f, longSpan * 0.5f - radius - 0.07f);
-        Vector3 longAxis = size.x >= size.z ? Vector3.right : Vector3.forward;
-        int count = offset > 0.08f ? 2 : 1;
-
-        for (int i = 0; i < count; i++)
-        {
-            float signedOffset = count == 1 ? 0f : (i == 0 ? -offset : offset);
-            var proxy = new GameObject("ARCADE_PINBALL_SMOOTH_COLLIDER_" + (i + 1));
-            proxy.transform.SetParent(parent, false);
-            proxy.transform.localPosition = new Vector3(bounds.center.x, bounds.min.y + height * 0.5f, bounds.center.z)
-                + longAxis * signedOffset;
-
-            var capsule = proxy.AddComponent<CapsuleCollider>();
-            capsule.direction = 1;
-            capsule.center = Vector3.zero;
-            capsule.radius = radius;
-            capsule.height = height;
-        }
+        var proxy = new GameObject(name);
+        proxy.transform.SetParent(parent, false);
+        var box = proxy.AddComponent<BoxCollider>();
+        box.center = new Vector3(center.x, floorLocalY + height * 0.5f, center.z);
+        box.size = new Vector3(Mathf.Max(0.18f, footprint.x), height, Mathf.Max(0.18f, footprint.y));
     }
+
+    private static Vector3 MapBox(Vector3 sourcePoint) => new(sourcePoint.x * FootprintScaleX, sourcePoint.y, sourcePoint.z * FootprintScaleZ);
 
     private static Vector3 CalculateVertexBoundsCenter(Vector3[] vertices)
     {
@@ -490,20 +575,20 @@ internal sealed class RawArcadeSceneService : IDisposable
         CreateInvisibleSolid(
             "RawArcade_Collision_Ceiling",
             parent,
-            new Vector3(FX(-0.06f), 2.80f, FZ(0.08f)),
+            new Vector3(FX(-0.06f), CeilingY + 0.12f, FZ(0.08f)),
             new Vector3(FSX(6.20f), 0.24f, FSZ(7.05f)));
 
         CreateInvisibleSolid(
             "RawArcade_Collision_South",
             parent,
-            new Vector3(0f, 1.36f, FZ(-3.02f)),
-            new Vector3(FSX(5.34f), 2.76f, FSZ(0.16f)));
+            new Vector3(0f, WallCenterY, FZ(-3.02f)),
+            new Vector3(FSX(5.34f), WallHeight, FSZ(0.16f)));
 
         CreateInvisibleSolid(
             "RawArcade_Collision_East",
             parent,
-            new Vector3(FX(2.64f), 1.36f, 0f),
-            new Vector3(FSX(0.16f), 2.76f, FSZ(6.12f)));
+            new Vector3(FX(2.64f), WallCenterY, 0f),
+            new Vector3(FSX(0.16f), WallHeight, FSZ(6.12f)));
     }
 
     private static void CreateInvisibleSolid(string name, Transform parent, Vector3 localPosition, Vector3 localScale)
@@ -572,14 +657,14 @@ internal sealed class RawArcadeSceneService : IDisposable
         if (_textures.TryGetValue(fileName, out Texture2D? cached) && cached != null)
             return cached;
 
-        string path = Path.Combine(ModPaths.RawSceneTexturesRoot, fileName);
-        if (!File.Exists(path))
+        string path = ModPaths.Find(Path.Combine(ModPaths.RawSceneTexturesRoot, fileName));
+        byte[]? bytes = ModFiles.ReadAllBytes(path);
+        if (bytes == null || bytes.Length == 0)
         {
             MelonLogger.Warning($"Raw arcade texture is missing: {path}");
             return null;
         }
 
-        byte[] bytes = File.ReadAllBytes(path);
         var texture = new Texture2D(2, 2) { name = "ScheduleIArcade_" + Path.GetFileNameWithoutExtension(fileName) };
         if (!ImageConversion.LoadImage(texture, bytes, false))
         {
@@ -620,8 +705,8 @@ internal sealed class RawArcadeSceneService : IDisposable
         CreateMissingWall(
             "RawArcade_Wall_West_Lower",
             parent,
-            new Vector3(FX(-2.67f), 1.36f, FZ(-0.72f)),
-            new Vector3(FSX(0.18f), 2.76f, FSZ(4.72f)),
+            new Vector3(FX(-2.67f), WallCenterY, FZ(-0.72f)),
+            new Vector3(FSX(0.18f), WallHeight, FSZ(4.72f)),
             wallMaterial);
 
         // The RED annotation is on the diagonal/chamfer wall, not the north or west wall. Cut a
@@ -641,7 +726,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             parent,
             chamferA,
             doorStart,
-            2.76f,
+            WallHeight,
             FSX(0.18f),
             wallMaterial);
         CreateWallSegment(
@@ -649,7 +734,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             parent,
             doorEnd,
             chamferB,
-            2.76f,
+            WallHeight,
             FSX(0.18f),
             wallMaterial);
         CreateWallSegmentAtY(
@@ -657,8 +742,8 @@ internal sealed class RawArcadeSceneService : IDisposable
             parent,
             doorStart,
             doorEnd,
-            RequestedDoorHeight + (2.76f - RequestedDoorHeight) * 0.5f,
-            2.76f - RequestedDoorHeight,
+            RequestedDoorHeight + (WallHeight - RequestedDoorHeight) * 0.5f,
+            WallHeight - RequestedDoorHeight,
             FSX(0.18f),
             wallMaterial);
 
@@ -671,13 +756,23 @@ internal sealed class RawArcadeSceneService : IDisposable
         CreateMissingWall(
             "RawArcade_Wall_North_Full",
             parent,
-            new Vector3((northLeft + northRight) * 0.5f, 1.36f, northZ),
-            new Vector3(northRight - northLeft, 2.76f, FSZ(0.18f)),
+            new Vector3((northLeft + northRight) * 0.5f, WallCenterY, northZ),
+            new Vector3(northRight - northLeft, WallHeight, FSZ(0.18f)),
             wallMaterial);
 
-        // Keep the source east wall/window assembly visible. Earlier builds removed a broad
-        // triangle region and covered it with an oversized purple cube, blocking the real windows
-        // and adjacent art. The invisible east collision shell still seals the room physically.
+        // The imported shell's south and east walls stop at ~2.66 m. Continue them up to the raised
+        // ceiling with the same atlas wall finish (visual only; the invisible shell collides).
+        if (wallMaterial != null)
+        {
+            const float bandBottom = 2.58f;
+            float bandHeight = WallHeight - bandBottom;
+            CreateDecorativeCuboid("RawArcade_Wall_South_Upper", parent,
+                new Vector3(FX(-0.015f), bandBottom + bandHeight * 0.5f, FZ(-2.995f)),
+                new Vector3(FSX(5.32f), bandHeight, 0.05f), Quaternion.identity, wallMaterial);
+            CreateDecorativeCuboid("RawArcade_Wall_East_Upper", parent,
+                new Vector3(FX(2.56f), bandBottom + bandHeight * 0.5f, FZ(0.02f)),
+                new Vector3(0.05f, bandHeight, FSZ(6.10f)), Quaternion.identity, wallMaterial);
+        }
     }
 
     private void CreateStreetFighterDoorInfill(Transform parent)
@@ -690,22 +785,15 @@ internal sealed class RawArcadeSceneService : IDisposable
         if (fill == null)
             return;
 
+        // A flush wall patch only: the dark frame that used to outline it read as a second door.
         Vector3 center = new(FX(2.52f) - 0.055f, 0.99f, FZ(2.332f));
         Vector3 panelSize = new(FSX(0.12f), 1.93f, FSZ(1.04f));
         CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorInfill", parent, center, panelSize, Quaternion.identity, fill);
 
-        Material frame = CreateSolidMaterial(
-            "ScheduleIArcade_M_StreetFighterInfillFrame",
-            new Color(0.025f, 0.035f, 0.065f, 1f),
-            0.18f,
-            0.38f);
-        float width = panelSize.z;
-        float height = panelSize.y;
-        float x = center.x - panelSize.x * 0.5f - 0.006f;
-        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameTop", parent, new Vector3(x, center.y + height * 0.5f, center.z), new Vector3(0.045f, 0.075f, width + 0.11f), Quaternion.identity, frame);
-        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameBottom", parent, new Vector3(x, center.y - height * 0.5f, center.z), new Vector3(0.045f, 0.075f, width + 0.11f), Quaternion.identity, frame);
-        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameNorth", parent, new Vector3(x, center.y, center.z + width * 0.5f), new Vector3(0.045f, height + 0.14f, 0.075f), Quaternion.identity, frame);
-        CreateDecorativeCuboid("RawArcade_StreetFighter_OldDoorFrameSouth", parent, new Vector3(x, center.y, center.z - width * 0.5f), new Vector3(0.045f, height + 0.14f, 0.075f), Quaternion.identity, frame);
+        // Continuous wall where the back-corner door, its windows and the pipe were removed.
+        CreateDecorativeCuboid("RawArcade_BackCorner_WallPatch", parent,
+            new Vector3(FX(2.545f), 1.30f, FZ(-2.33f)),
+            new Vector3(0.04f, 2.60f, FSZ(1.28f)), Quaternion.identity, fill);
     }
 
     private void CreateWallSegment(string name, Transform parent, Vector3 localA, Vector3 localB, float height, float thickness, Material? material)
@@ -832,9 +920,56 @@ internal sealed class RawArcadeSceneService : IDisposable
         filter.sharedMesh = mesh;
         var renderer = overlay.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = CreateCheckerboardFloorMaterial();
+        // Visual only: the walkable floor is the single slab from CreateWalkableFloor.
+    }
 
-        var collider = overlay.AddComponent<MeshCollider>();
+    /// <summary>
+    /// ONE flat floor collider whose top is exactly the visible floor plane: a convex five-sided
+    /// slab (the room's wall outline), so there are no seams or steps, and its chamfer edge stops
+    /// at the door line so the walk-in vestibule ramp meets it without a lip.
+    /// </summary>
+    private void CreateWalkableFloor(Transform parent)
+    {
+        Vector2[] outline =
+        {
+            new(FX(-2.67f), FZ(-3.02f)),
+            new(FX(-2.67f), FZ(1.56f)),
+            new(FX(-0.84f), FZ(3.06f)),
+            new(FX(2.64f), FZ(3.06f)),
+            new(FX(2.64f), FZ(-3.02f)),
+        };
+        const float thickness = 0.60f;
+        var vertices = new Vector3[outline.Length * 2];
+        for (int i = 0; i < outline.Length; i++)
+        {
+            vertices[i] = new Vector3(outline[i].x, FloorTopY, outline[i].y);
+            vertices[i + outline.Length] = new Vector3(outline[i].x, FloorTopY - thickness, outline[i].y);
+        }
+        var triangles = new List<int>();
+        int n = outline.Length;
+        for (int i = 1; i + 1 < n; i++)
+        {
+            triangles.AddRange(new[] { 0, i, i + 1 });
+            triangles.AddRange(new[] { n, n + i + 1, n + i });
+        }
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            triangles.AddRange(new[] { i, n + i, j });
+            triangles.AddRange(new[] { j, n + i, n + j });
+        }
+        var mesh = new Mesh { name = "ScheduleIArcade_WalkableFloor" };
+        mesh.vertices = vertices;
+        mesh.triangles = triangles.ToArray();
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        _meshes.Add(mesh);
+
+        var floor = new GameObject("RawArcade_WalkableFloor");
+        floor.transform.SetParent(parent, false);
+        var collider = floor.AddComponent<MeshCollider>();
         collider.sharedMesh = mesh;
+        collider.convex = true;
     }
 
     private Material CreateCheckerboardFloorMaterial()
@@ -901,7 +1036,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         var ceiling = new GameObject("RawArcade_SealedInteriorCeiling");
         ceiling.transform.SetParent(parent, false);
 
-        const float y = 2.625f;
+        const float y = CeilingY;
         Vector3[] vertices =
         {
             new(FX(-2.67f), y, FZ(-3.02f)),
@@ -943,11 +1078,7 @@ internal sealed class RawArcadeSceneService : IDisposable
         filter.sharedMesh = mesh;
         var renderer = ceiling.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = CreateAcousticCeilingMaterial();
-
-        // The broader invisible cap remains as a fail-safe, while this exact five-sided collider
-        // guarantees the visible roof itself has no opening along the chamfer.
-        var collider = ceiling.AddComponent<MeshCollider>();
-        collider.sharedMesh = mesh;
+        // Collision comes from the invisible ceiling box just above this plane.
     }
 
     private Material CreateAcousticCeilingMaterial()
@@ -1053,8 +1184,8 @@ internal sealed class RawArcadeSceneService : IDisposable
 
         // Crown trim visually closes the ceiling line. Thin native-style red/white emissive strips
         // below it provide arcade identity without overpowering cabinet art or wall texture.
-        CreatePerimeterBand("Arcade_Crown", parent, southWest, southEast, northEast, northWest, chamferWest, 2.57f, 0.12f, 0.085f, crown, crown);
-        CreatePerimeterBand("Arcade_Neon", parent, southWest, southEast, northEast, northWest, chamferWest, 2.43f, 0.030f, 0.065f, redNeon, whiteNeon);
+        CreatePerimeterBand("Arcade_Crown", parent, southWest, southEast, northEast, northWest, chamferWest, CeilingY - 0.055f, 0.12f, 0.085f, crown, crown);
+        CreatePerimeterBand("Arcade_Neon", parent, southWest, southEast, northEast, northWest, chamferWest, CeilingY - 0.195f, 0.030f, 0.065f, redNeon, whiteNeon);
 
         Vector3[] corners = { southWest, southEast, northEast, northWest, chamferWest };
         for (int i = 0; i < corners.Length; i++)
@@ -1062,8 +1193,8 @@ internal sealed class RawArcadeSceneService : IDisposable
             CreateDecorativeCuboid(
                 $"Arcade_CornerColumn_{i + 1}",
                 parent,
-                corners[i] + Vector3.up * 1.30f,
-                new Vector3(0.105f, 2.56f, 0.105f),
+                corners[i] + Vector3.up * ((CeilingY - 0.04f) * 0.5f),
+                new Vector3(0.105f, CeilingY - 0.04f, 0.105f),
                 Quaternion.identity,
                 crown);
         }
@@ -1200,20 +1331,6 @@ internal sealed class RawArcadeSceneService : IDisposable
         return material;
     }
 
-    private void CreateSafetyFloor(Transform parent)
-    {
-        var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        floor.name = "RawArcade_SafetyFloor";
-        floor.transform.SetParent(parent, false);
-        // Top at -0.05 (5 cm under the visible floor) so the part of this box that extends past the
-        // chamfer into the walk-in vestibule cannot form a lip above the vestibule ramp.
-        floor.transform.localPosition = new Vector3(0f, -0.55f, 0f);
-        floor.transform.localScale = new Vector3(FSX(5.80f), 1.00f, FSZ(6.60f));
-
-        var renderer = floor.GetComponent<Renderer>();
-        if (renderer != null)
-            renderer.enabled = false;
-    }
 
     private void CreateActualDoorMarkers(Transform parent, out Transform spawnMarker, out Transform exitMarker)
     {
@@ -1356,7 +1473,7 @@ internal sealed class RawArcadeSceneService : IDisposable
     /// </summary>
     public static bool IsInsideInteriorLocal(Vector3 local)
     {
-        if (local.y < -0.6f || local.y > 3.0f)
+        if (local.y < -0.6f || local.y > CeilingY + 0.2f)
             return false;
         if (local.x < FX(-2.67f) || local.x > FX(2.64f) || local.z < FZ(-3.02f) || local.z > FZ(3.06f))
             return false;
@@ -1497,9 +1614,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             if (cabinetRenderer != null)
                 cabinetRenderer.sharedMaterial = CreateDoomCabinetMaterial(index);
 
-            var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            screen.name = Constants.ScreenPrefix + suffix;
-            screen.transform.SetParent(cabinet, false);
+            GameObject screen = CreateScreenQuad(Constants.ScreenPrefix + suffix, cabinet);
             // The imported CRT face is a shallow upward tilt, not a vertical plane. Match that
             // physical glass angle and sit just above it so the full playable image remains
             // flush and cannot disappear behind the source mesh's fake monitor geometry.
@@ -1560,21 +1675,14 @@ internal sealed class RawArcadeSceneService : IDisposable
         if (filter == null || filter.sharedMesh == null)
             return;
 
-        Bounds bounds = filter.sharedMesh.bounds;
-        var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        screen.name = Constants.ScreenPrefix + "PACMAN";
-        screen.transform.SetParent(table, false);
-        screen.transform.localPosition = new Vector3(bounds.center.x, bounds.max.y + 0.004f, bounds.center.z);
-        // The cocktail display lies horizontally. Its +Y texture axis maps toward the table's
-        // player side so the overhead interaction camera reads score text normally.
-        screen.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
-        // Keep the playable surface inside the existing printed Pac-Man display inset. The
-        // previous full-top overlay hid the table artwork and looked like a floating black slab.
-        // Negative X corrects the cocktail display's horizontal U axis for the overhead camera.
-        screen.transform.localScale = new Vector3(
-            -Mathf.Min(1.10f, bounds.size.x * 0.46f),
-            Mathf.Min(0.48f, bounds.size.z * 0.48f),
-            1f);
+        // The printed monitor inset of the table-top texture, measured from the mesh UVs:
+        // x -0.381..0.143 (0.524 m along the table) and z -0.228..0.198 (0.426 m across), top y 0.299.
+        // The 224 x 288 portrait picture is fitted inside it at native aspect: 0.524 m tall along the
+        // table axis, 0.408 m wide, centred, so the maze sits inside the bezel with a slim border.
+        var screen = CreateScreenQuad(Constants.ScreenPrefix + "PACMAN", table);
+        screen.transform.localPosition = PacmanScreenLayout.LocalCentre;
+        screen.transform.localRotation = PacmanScreenLayout.LocalRotation(seatAtPositiveX: true);
+        screen.transform.localScale = new Vector3(PacmanScreenLayout.Width, PacmanScreenLayout.Height, 1f);
 
         Renderer? renderer = screen.GetComponent<Renderer>();
         if (renderer != null)
@@ -1598,11 +1706,8 @@ internal sealed class RawArcadeSceneService : IDisposable
             if (machine == null || filter == null || filter.sharedMesh == null)
                 continue;
 
-            Bounds bounds = filter.sharedMesh.bounds;
             string suffix = "PINBALL" + index.ToString("00");
-            var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            screen.name = Constants.ScreenPrefix + suffix;
-            screen.transform.SetParent(machine, false);
+            GameObject screen = CreateScreenQuad(Constants.ScreenPrefix + suffix, machine);
 
             // The imported machine pair 3/4 is mirrored across its local X axis. Its sloped
             // playfield glass therefore has the opposite normal and centre from machines 1/2.
@@ -1611,8 +1716,19 @@ internal sealed class RawArcadeSceneService : IDisposable
             Vector3 glassNormal = mirroredGlass
                 ? new Vector3(0.148f, 0.989f, 0f)
                 : new Vector3(-0.148f, 0.989f, 0f);
-            Vector3 glassCenter = new Vector3(mirroredGlass ? 0.10f : -0.10f, 0.012f, bounds.center.z);
-            screen.transform.localPosition = glassCenter + glassNormal * 0.007f;
+            // Fit inside the measured inner rails/apron (see PinballPlayfieldMapping): the whole
+            // simulated table including flippers and drain is visible above the front apron, and
+            // the side-rail model no longer overlaps the ball's lanes.
+            var (centreX, centreZ) = Games.Pinball.PinballPlayfieldMapping.QuadCentre();
+            if (mirroredGlass)
+            {
+                centreX = -centreX;
+                centreZ = -centreZ;
+            }
+            // Playfield plane through (-0.10, 0.012) with the measured 8.5 degree slope.
+            float planeY = 0.012f + (mirroredGlass ? -1f : 1f) * 0.1497f * (centreX - (mirroredGlass ? 0.10f : -0.10f));
+            Vector3 glassCenter = new Vector3(centreX, planeY, centreZ);
+            screen.transform.localPosition = glassCenter + glassNormal * 0.009f;
             Quaternion glassRotation = Quaternion.LookRotation(glassNormal, Vector3.right);
             // Preserve the measured glass normal, then rotate only the 3/4 texture frame around
             // that normal. Their source UV basis is upside down even though their glass plane is
@@ -1620,14 +1736,7 @@ internal sealed class RawArcadeSceneService : IDisposable
             if (mirroredGlass)
                 glassRotation *= Quaternion.AngleAxis(180f, Vector3.forward);
             screen.transform.localRotation = glassRotation;
-            // The physical playfield glass is wider/longer on the Doom-row pair. Use the mesh
-            // bounds so every display fills its glass without hanging past its metal rails.
-            float glassWidth = index <= 2
-                ? Mathf.Min(bounds.size.z * 0.75f, 0.44f)
-                : Mathf.Min(bounds.size.z * 0.89f, 0.54f);
-            float glassLength = index <= 2
-                ? Mathf.Min(bounds.size.x * 0.72f, 0.67f)
-                : Mathf.Min(bounds.size.x * 0.79f, 0.74f);
+            var (glassWidth, glassLength) = Games.Pinball.PinballPlayfieldMapping.QuadSize();
 
             // The shared U axis keeps text and score layout identical across all four tables.
             screen.transform.localScale = new Vector3(-glassWidth, glassLength, 1f);
@@ -1643,7 +1752,45 @@ internal sealed class RawArcadeSceneService : IDisposable
                     new Color32(255, 218, 96, 255));
         }
 
-        MelonLogger.Msg("Four Space Cadet pinball displays were fitted and unmirrored on their sloped playfield glass.");
+        MelonLogger.Msg("Four Space Cadet pinball displays were fitted inside the inner rails, above the apron, at the table's native aspect.");
+    }
+
+    private void CreateAirHockeyScreen(Transform root)
+    {
+        Transform? table = FindDeepChild(root, Constants.CabinetPrefix + "AIRHOCKEY");
+        if (table == null)
+            return;
+        // Inner rails measured from the mesh: x +-0.437, z +-0.865, surface y -0.04. The play
+        // texture is landscape (length along the table), shown to a top-down camera.
+        GameObject screen = CreateScreenQuad(Constants.ScreenPrefix + "AIRHOCKEY", table);
+        screen.transform.localPosition = new Vector3(0f, -0.022f, 0f);
+        screen.transform.localRotation = Quaternion.LookRotation(Vector3.down, Vector3.right);
+        screen.transform.localScale = new Vector3(1.72f, 0.86f, 1f);
+        Renderer? renderer = screen.GetComponent<Renderer>();
+        if (renderer != null)
+            renderer.sharedMaterial = CreateAttractScreenMaterial(
+                "ScheduleIArcade_M_AirHockeyScreen",
+                "__arcade_airhockey_standby",
+                "AIR HOCKEY",
+                "2 PLAYERS $10",
+                new Color32(235, 60, 80, 255),
+                new Color32(70, 140, 255, 255));
+        MelonLogger.Msg("Air hockey table is interactive: two players, first to 7 (local keyboard: P1 WASD, P2 arrows).");
+    }
+
+    /// <summary>A screen quad with a thin trigger box (aim target) instead of the primitive's MeshCollider.</summary>
+    private static GameObject CreateScreenQuad(string name, Transform parent)
+    {
+        var screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        screen.name = name;
+        screen.transform.SetParent(parent, false);
+        Collider? meshCollider = screen.GetComponent<Collider>();
+        if (meshCollider != null)
+            UnityEngine.Object.DestroyImmediate(meshCollider);
+        var trigger = screen.AddComponent<BoxCollider>();
+        trigger.size = new Vector3(1f, 1f, 0.02f);
+        trigger.isTrigger = true;
+        return screen;
     }
 
     private Material CreateUnlitTextureMaterial(string textureName, string materialName)
@@ -1707,10 +1854,11 @@ internal sealed class RawArcadeSceneService : IDisposable
         Color softWhite = new(0.83f, 0.90f, 1.00f, 1f);
         Color cyan = new(0.08f, 0.82f, 1.00f, 1f);
         Color magenta = new(1.00f, 0.12f, 0.48f, 1f);
-        CreatePointLight(parent, new Vector3(FX(-1.80f), 2.35f, FZ(-1.85f)), 5.2f, 2.00f, warm);
-        CreatePointLight(parent, new Vector3(FX(1.45f), 2.35f, FZ(-1.65f)), 5.2f, 2.00f, warm);
-        CreatePointLight(parent, new Vector3(FX(-1.55f), 2.35f, FZ(1.85f)), 5.2f, 2.00f, softWhite);
-        CreatePointLight(parent, new Vector3(FX(1.50f), 2.35f, FZ(1.85f)), 5.2f, 2.00f, softWhite);
+        float lampY = CeilingY - 0.35f;
+        CreatePointLight(parent, new Vector3(FX(-1.80f), lampY, FZ(-1.85f)), 6.0f, 2.10f, warm);
+        CreatePointLight(parent, new Vector3(FX(1.45f), lampY, FZ(-1.65f)), 6.0f, 2.10f, warm);
+        CreatePointLight(parent, new Vector3(FX(-1.55f), lampY, FZ(1.85f)), 6.0f, 2.10f, softWhite);
+        CreatePointLight(parent, new Vector3(FX(1.50f), lampY, FZ(1.85f)), 6.0f, 2.10f, softWhite);
         CreatePointLight(parent, new Vector3(FX(-2.34f), 1.45f, FZ(-0.20f)), 3.2f, 1.10f, cyan);
         CreatePointLight(parent, new Vector3(FX(2.20f), 1.45f, FZ(0.90f)), 3.2f, 1.10f, magenta);
     }

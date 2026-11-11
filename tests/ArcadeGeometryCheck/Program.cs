@@ -22,6 +22,7 @@ if (!File.Exists(level1))
     return 2;
 }
 
+int failures = 0;
 var scene = Scene.Load(level1);
 long buildingGo = scene.FindByPath("Map/Hyland Point/Region_Northtown/Arcade (1)");
 if (buildingGo == 0)
@@ -40,6 +41,8 @@ Console.WriteLine($"Solid box colliders near the Arcade intersecting the player 
 
 // --- Room (RawArcadeSceneService constants) --------------------------------------------------
 const float FXs = 1.22f, FZs = 1.34f;
+// Must match ScheduleIArcade.Utils.ArcadeDimensions (verified against the source in RoomChecks).
+const float CeilingH = 3.40f, WallH = 3.48f, FloorTop = 0.043f;
 static float FX(float x) => x * 1.22f;
 static float FZ(float z) => z * 1.34f;
 var roomOrigin = new Vector3(-48.4f, -3.8f, 141.4f);
@@ -69,18 +72,18 @@ Vector3 doorStart = doorCenterLocal - tangent * (doorWidth * 0.5f);
 Vector3 doorEnd = doorCenterLocal + tangent * (doorWidth * 0.5f);
 var roomBoxes = new List<Box>
 {
-    RoomBox("room west wall", new Vector3(FX(-2.67f), 1.36f, FZ(-0.72f)), new Vector3(0.18f * FXs, 2.76f, 4.72f * FZs)),
-    Segment("room chamfer before door", chamferA, doorStart, 2.76f, 0.18f * FXs, 0.12f),
-    Segment("room chamfer after door", doorEnd, chamferB, 2.76f, 0.18f * FXs, 0.12f),
-    RoomBox("room north wall", new Vector3((FX(-0.84f) + FX(2.67f)) * 0.5f, 1.36f, FZ(3.06f)), new Vector3(FX(2.67f) - FX(-0.84f), 2.76f, 0.18f * FZs)),
-    RoomBox("room south shell", new Vector3(0, 1.36f, FZ(-3.02f)), new Vector3(5.34f * FXs, 2.76f, 0.16f * FZs)),
-    RoomBox("room east shell", new Vector3(FX(2.64f), 1.36f, 0), new Vector3(0.16f * FXs, 2.76f, 6.12f * FZs)),
+    RoomBox("room west wall", new Vector3(FX(-2.67f), WallH * 0.5f, FZ(-0.72f)), new Vector3(0.18f * FXs, WallH, 4.72f * FZs)),
+    Segment("room chamfer before door", chamferA, doorStart, WallH, 0.18f * FXs, 0.12f),
+    Segment("room chamfer after door", doorEnd, chamferB, WallH, 0.18f * FXs, 0.12f),
+    RoomBox("room north wall", new Vector3((FX(-0.84f) + FX(2.67f)) * 0.5f, WallH * 0.5f, FZ(3.06f)), new Vector3(FX(2.67f) - FX(-0.84f), WallH, 0.18f * FZs)),
+    RoomBox("room south shell", new Vector3(0, WallH * 0.5f, FZ(-3.02f)), new Vector3(5.34f * FXs, WallH, 0.16f * FZs)),
+    RoomBox("room east shell", new Vector3(FX(2.64f), WallH * 0.5f, 0), new Vector3(0.16f * FXs, WallH, 6.12f * FZs)),
 };
 Vector3 roomDoorCenter = RoomToWorld(doorCenterLocal);
 Vector3 roomInward = Flat(Vector3.Transform(roomInwardLocal, roomRot));
-Box RoomLeaf(string name, Vector3 hingeLocal, Vector3 towardCenterLocal, bool open)
+Box RoomLeaf(string name, Vector3 hingeLocal, Vector3 towardCenterLocal, bool open, bool intoRoom = false)
 {
-    Vector3 dirLocal = open ? -roomInwardLocal : towardCenterLocal; // open leaves point back out of the room
+    Vector3 dirLocal = open ? (intoRoom ? roomInwardLocal : -roomInwardLocal) : towardCenterLocal; // open leaves swing away from the player
     Vector3 a = hingeLocal, b = hingeLocal + dirLocal * (doorWidth * 0.5f);
     return Segment(name, a, b, doorHeight, 0.09f, 0f);
 }
@@ -102,23 +105,49 @@ Console.WriteLine($"Room chamfer door centre {V(roomDoorCenter)}; vestibule dept
 // Walk-in modifications.
 var walkIn = buildingBoxes.Where(b => !ReferenceEquals(b.Source, seal.Source) && !leaves.Any(l => ReferenceEquals(l.Source, b.Source))).ToList();
 walkIn.AddRange(seal.SplitAroundOpening(doorway));
-foreach (Box leaf in leaves)
+// 0.4.1: each leaf is a clone placed in the vanilla "Door" pose; its origin (== the Collider
+// child's origin) is the hinge edge. Opening swings away from the player: inward when entering,
+// outward when leaving. Both variants are path-checked below.
+var hinges = leaves.Select(l => l.World.Translation).ToList();
+var leafCentres = leaves.Select(l => l.WorldCenter).ToList();
+var walkInOut = new List<Box>(walkIn);
+for (int i = 0; i < leaves.Count; i++)
 {
-    Vector3 c = leaf.Center;
-    float sign = MathF.Sign(Vector3.Dot(Flat(c - buildingDoorCenter), along));
-    float half = Aabb.Of(leaf.Corners()).HalfExtentAlong(along, new Vector3(c.X, buildingDoorCenter.Y, c.Z));
-    Vector3 hinge = new Vector3(c.X, buildingDoorCenter.Y, c.Z) + along * (sign * half);
-    float angle = ChooseSign(hinge, c, -inward, 88f);
-    walkIn.Add(leaf.RotatedAbout(hinge, angle, leaf.Name + " (open)"));
+    walkIn.Add(leaves[i].RotatedAbout(hinges[i], ChooseSign(hinges[i], leafCentres[i], inward, 88f), leaves[i].Name + " (open inward)"));
+    walkInOut.Add(leaves[i].RotatedAbout(hinges[i], ChooseSign(hinges[i], leafCentres[i], -inward, 88f), leaves[i].Name + " (open outward)"));
+}
+{
+    // Closed fit: the leaves meet in the middle and their hinge edges sit on the opening edges.
+    float frameHalf = hinges.Max(h => MathF.Abs(Vector3.Dot(Flat(h - buildingDoorCenter), along)));
+    var freeEdges = new List<float>();
+    for (int i = 0; i < leaves.Count; i++)
+    {
+        Vector3 arm = Flat(leafCentres[i] - hinges[i]);
+        freeEdges.Add(Vector3.Dot(Flat(hinges[i] + arm * 2f - buildingDoorCenter), along));
+    }
+    float centreGap = MathF.Abs(freeEdges[0] - freeEdges[1]);
+    float asym = MathF.Abs(MathF.Abs(Vector3.Dot(Flat(hinges[0] - buildingDoorCenter), along)) - MathF.Abs(Vector3.Dot(Flat(hinges[1] - buildingDoorCenter), along)));
+    float openingHalf = doorway.HalfExtentAlong(along, buildingDoorCenter);
+    Console.WriteLine($"Closed leaves: hinge edges at +-{frameHalf:0.000} m (opening half {openingHalf:0.000}, asymmetry {asym * 1000:0} mm); free edges meet with a {centreGap * 1000:0} mm gap. Jambs overlap each hinge edge by 20 mm; centre stop 35 mm wide.");
+    if (centreGap > 0.035f) { failures++; Console.WriteLine("  FAIL centre gap wider than the centre stop"); }
+    if (asym > 0.02f) { failures++; Console.WriteLine("  FAIL leaves offset from the opening"); }
+    if (frameHalf > openingHalf + 0.005f) { failures++; Console.WriteLine("  FAIL hinge edge outside the measured opening"); }
 }
 float roomHalf = doorWidth * 0.5f;
 float halfWidth = MathF.Max(doorwayHalf, roomHalf) + 0.12f;
 var vestRot = LookRotation(inward);
 Box Vest(string name, Vector3 local, Vector3 size) => Box.Oriented(name, buildingDoorCenter + Vector3.Transform(local, vestRot), vestRot, size);
-const float vestHeight = 2.55f, wallT = 0.12f, start = 0.04f;
-float len = depth - start;
-walkIn.Add(Vest("vestibule wall left", new Vector3(-halfWidth - wallT * 0.5f, vestHeight * 0.5f, start + len * 0.5f), new Vector3(wallT, vestHeight, len)));
-walkIn.Add(Vest("vestibule wall right", new Vector3(halfWidth + wallT * 0.5f, vestHeight * 0.5f, start + len * 0.5f), new Vector3(wallT, vestHeight, len)));
+const float wallT = 0.12f, start = 0.04f;
+float panelTop = seal.MaxY;
+float vestHeight = Math.Clamp(panelTop - buildingDoorCenter.Y - 0.10f, 2.55f, CeilingH);
+float len = depth - start + 0.12f;
+Console.WriteLine($"Vestibule: height {vestHeight:0.00} m (ceiling slab top y {buildingDoorCenter.Y + vestHeight + 0.10f:0.00}) under the corner panel top y {panelTop:0.00}");
+if (buildingDoorCenter.Y + vestHeight + 0.10f > panelTop + 0.001f) { failures++; Console.WriteLine("  FAIL vestibule pokes through the corner panel"); }
+foreach (var list in new[] { walkIn, walkInOut })
+{
+    list.Add(Vest("vestibule wall left", new Vector3(-halfWidth - wallT * 0.5f, vestHeight * 0.5f, start + len * 0.5f), new Vector3(wallT, vestHeight, len)));
+    list.Add(Vest("vestibule wall right", new Vector3(halfWidth + wallT * 0.5f, vestHeight * 0.5f, start + len * 0.5f), new Vector3(wallT, vestHeight, len)));
+}
 
 var vanilla = new List<Box>(buildingBoxes);
 vanilla.AddRange(roomBoxes);
@@ -127,6 +156,9 @@ vanilla.Add(RoomLeaf("room leaf B (closed)", doorEnd, -tangent, false));
 walkIn.AddRange(roomBoxes);
 walkIn.Add(RoomLeaf("room leaf A (open)", doorStart, tangent, true));
 walkIn.Add(RoomLeaf("room leaf B (open)", doorEnd, -tangent, true));
+walkInOut.AddRange(roomBoxes);
+walkInOut.Add(RoomLeaf("room leaf A (open into room)", doorStart, tangent, true, intoRoom: true));
+walkInOut.Add(RoomLeaf("room leaf B (open into room)", doorEnd, -tangent, true, intoRoom: true));
 
 foreach (Box b in walkIn.Where(b => b.Name.StartsWith("corner")))
 {
@@ -136,12 +168,12 @@ foreach (Box b in walkIn.Where(b => b.Name.StartsWith("corner")))
 // Only colliders that intersect the standing player's body band can block walking.
 vanilla = vanilla.Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
 walkIn = walkIn.Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
+walkInOut = walkInOut.Where(b => b.MaxY > bandMin && b.MinY < bandMax).ToList();
 
 Vector3 street = buildingDoorCenter - inward * 2.5f;
 Vector3 insideRoom = roomDoorCenter + roomInward * 1.2f;
 Console.WriteLine($"Path query: street {V(street)} -> inside room {V(insideRoom)}");
 
-int failures = 0;
 foreach (float radius in new[] { 0.30f, 0.40f })
 {
     var vanillaResult = Grid.FindPath(vanilla, street, insideRoom, radius);
@@ -150,6 +182,9 @@ foreach (float radius in new[] { 0.30f, 0.40f })
     Console.WriteLine($"  capsule r={radius:0.00} m  walk-in: {(walkInResult.Found ? "PATH" : "BLOCKED")} length {walkInResult.Length:0.0} m, min clearance {walkInResult.MinClearance:0.00} m {walkInResult.Note}");
     if (vanillaResult.Found) { failures++; Console.WriteLine("  FAIL vanilla building should be sealed (that is why the old build teleported)"); }
     if (!walkInResult.Found) { failures++; Console.WriteLine("  FAIL walk-in entrance is not walkable"); }
+    var outResult = Grid.FindPath(walkInOut, insideRoom, street, radius);
+    Console.WriteLine($"  capsule r={radius:0.00} m  leaving (leaves swung the other way): {(outResult.Found ? "PATH" : "BLOCKED")} length {outResult.Length:0.0} m {outResult.Note}");
+    if (!outResult.Found) { failures++; Console.WriteLine("  FAIL leaving the arcade is blocked"); }
 }
 
 // The vestibule must stay inside the building and must not cut into the room interior.
@@ -164,6 +199,7 @@ foreach (Box b in walkIn.Where(b => b.Name.StartsWith("vestibule")))
 float rise = (roomOrigin.Y + 0.043f) - foot;
 Console.WriteLine($"  vestibule ramp: rise {rise:0.000} m over {depth:0.00} m = {MathF.Atan2(rise, depth) * 180f / MathF.PI:0.0} deg");
 
+failures += RoomChecks.Run(scene, buildingGo, roomOrigin, roomRot, CeilingH, WallH, FloorTop, rise, depth);
 Console.WriteLine(failures == 0 ? "\nGEOMETRY CHECK PASSED" : $"\nGEOMETRY CHECK FAILED ({failures})");
 return failures == 0 ? 0 : 1;
 

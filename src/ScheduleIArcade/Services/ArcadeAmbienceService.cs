@@ -106,7 +106,7 @@ internal sealed class ArcadeAmbienceService : IDisposable
 
         _loadAttempted = true;
 
-        if (!File.Exists(ModPaths.AmbiencePath))
+        if (!ModPaths.Exists(ModPaths.AmbiencePath))
         {
             MelonLogger.Warning($"Arcade ambience file is missing: {ModPaths.AmbiencePath}");
             return;
@@ -115,7 +115,7 @@ internal sealed class ArcadeAmbienceService : IDisposable
         try
         {
             MelonLogger.Msg($"Loading arcade ambience with direct PCM WAV decoder: {ModPaths.AmbiencePath}");
-            _clip = LoadPcm16Wave(ModPaths.AmbiencePath);
+            _clip = LoadPcm16Wave(ModPaths.Find(ModPaths.AmbiencePath));
             if (_clip == null)
             {
                 MelonLogger.Warning("Arcade ambience WAV decoder returned no AudioClip.");
@@ -140,7 +140,7 @@ internal sealed class ArcadeAmbienceService : IDisposable
 
     private static AudioClip LoadPcm16Wave(string path)
     {
-        byte[] bytes = File.ReadAllBytes(path);
+        byte[] bytes = Utils.ModFiles.ReadAllBytes(path) ?? Array.Empty<byte>();
         if (bytes.Length < 44)
             throw new InvalidDataException("WAV file is too short.");
 

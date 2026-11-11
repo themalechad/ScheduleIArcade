@@ -113,6 +113,8 @@ internal sealed class CabinetInteractionService
                         ? "WASD/ARROWS MOVE • CTRL/CLICK FIRE • SPACE/E USE • TAB DOOM MENU • ESC EXIT"
                         : _session.ActiveCabinet?.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase) == true
                             ? "LEFT / RIGHT FLIPPERS  •  SPACE LAUNCH  •  ESC EXIT"
+                        : _session.ActiveCabinet?.GameId.Equals("air_hockey", StringComparison.OrdinalIgnoreCase) == true
+                            ? "P1 WASD  •  P2 ARROWS (ENTER JOINS)  •  ESC EXIT"
                             : _session.ActiveCabinet?.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) == true
                             ? "ARROWS MOVE  •  TAB PAUSE  •  ESC EXIT"
                             : "ARROWS PLAY  •  ESC EXIT",
@@ -135,7 +137,9 @@ internal sealed class CabinetInteractionService
                 ? "MACHINE IN USE"
                 : doomProblem.Length > 0
                     ? "OUT OF ORDER  •  NO CHARGE"
-                    : "PRESS [E]  PLAY  •  $10 CASH";
+                    : _lookedAt.GameId.Equals("air_hockey", StringComparison.OrdinalIgnoreCase)
+                        ? "PRESS [E]  JOIN TABLE  •  $10 WHEN BOTH SIDES PLAY"
+                        : "PRESS [E]  PLAY  •  $10 CASH";
         string detail = showStartFeedback
             ? (doomProblem.Length > 0 ? doomProblem : "A game only charges when its session starts successfully.")
             : _lookedAt.IsOccupied

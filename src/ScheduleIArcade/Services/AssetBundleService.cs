@@ -21,7 +21,8 @@ internal sealed class AssetBundleService : IDisposable
             return false;
 
         _loadAttempted = true;
-        if (!File.Exists(ModPaths.BundlePath))
+        string bundlePath = ModPaths.Find(ModPaths.BundlePath);
+        if (!ModPaths.Exists(bundlePath))
         {
             if (!_missingLogged)
             {
@@ -31,7 +32,14 @@ internal sealed class AssetBundleService : IDisposable
             return false;
         }
 
-        _bundle = AssetBundle.LoadFromFile(ModPaths.BundlePath);
+        _bundle = AssetBundle.LoadFromFile(bundlePath);
+        if (_bundle == null)
+        {
+            // Vortex symlink or odd path casing that Unity's native loader rejects: load from memory instead.
+            byte[]? bundleBytes = Utils.ModFiles.ReadAllBytes(bundlePath);
+            if (bundleBytes != null && bundleBytes.Length > 0)
+                _bundle = AssetBundle.LoadFromMemory(bundleBytes);
+        }
         if (_bundle == null)
         {
             MelonLogger.Error("Unity failed to load the Schedule I Arcade AssetBundle.");

@@ -65,7 +65,7 @@ namespace ManagedDoom
         {
             names.Add(Path.GetFileNameWithoutExtension(fileName).ToLower());
 
-            var stream = new FileStream(fileName, FileMode.Open, FileAccess.Read);
+            var stream = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             streams.Add(stream);
 
             string identification;

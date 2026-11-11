@@ -28,7 +28,6 @@ internal sealed class ArcadeWalkInService : IDisposable
     private const float AutoCloseDistance = 4.5f;
     private const float AutoCloseDelay = 6f;
     private const float SwingSeconds = 0.55f;
-    private const float VestibuleHeight = 2.55f;
 
     private readonly ArcadeLocationService _location;
     private readonly ArcadePreferences _preferences;
@@ -42,6 +41,7 @@ internal sealed class ArcadeWalkInService : IDisposable
     private bool _occludersHidden;
     private DoorPair? _target;
     private bool _initialized;
+    private Vector3 _playerPosition;
 
     public ArcadeWalkInService(ArcadeLocationService location, ArcadePreferences preferences, Func<bool> blockingInteraction)
     {
@@ -138,14 +138,23 @@ internal sealed class ArcadeWalkInService : IDisposable
             }
 
             // Only now, after every measurement passed, touch the vanilla building.
+            Material? glass = FindTransparentGlass();
+            Transform? sourceLeaf = FindVanillaGlassDoorLeaf(out string sourceName);
             var buildingLeaves = new List<Leaf>();
-            Vector3 doorwayCenterForHandles = doorway.center;
+            int cloned = 0;
             foreach (var (door, model, box, leafBounds) in measured)
             {
                 DisableVanillaDoorInteraction(door);
                 HideVanillaLeaf(model);
-                BoxCollider replacementCollider = BuildGlassLeaf(box, model, doorwayCenterForHandles, out Transform replacement);
-                buildingLeaves.Add(new Leaf(replacement, leafBounds, new Collider[] { replacementCollider }));
+                // The vanilla leaf's own "Door" transform is the exact closed pose and its origin is
+                // the hinge edge (the leaf collider is offset half a leaf width from it).
+                Transform pose = box.transform.parent != null && box.transform.name == "Collider" ? box.transform.parent : box.transform;
+                Leaf? leaf = sourceLeaf != null ? CloneGlassLeaf(sourceLeaf, pose, model.gameObject.layer) : null;
+                if (leaf != null)
+                    cloned++;
+                else
+                    leaf = BuildFallbackLeaf(box, pose, model, doorway.center, glass);
+                buildingLeaves.Add(leaf);
             }
 
             float doorwayHalfWidth = HalfExtentAlong(doorway, along, buildingDoorCenter);
@@ -153,24 +162,30 @@ internal sealed class ArcadeWalkInService : IDisposable
             float roomDoorHalfWidth = Vector3.Distance(Flat(hingeA.position), Flat(hingeB.position)) * 0.5f;
 
             OpenCornerDoorCollider(cornerDoor, doorway);
+            ReplaceOpaqueGlass(cornerDoor, glass);
+            BuildEntranceFrame(buildingDoorCenter, along, inward, buildingLeaves, doorwayHeight);
 
-            foreach (Leaf leaf in buildingLeaves)
-                leaf.ConfigureSwing(buildingDoorCenter, along, -inward, 88f); // vanilla glass doors swing out to the street
-            var entrance = new DoorPair("ARCADE ENTRANCE", buildingDoorCenter + Vector3.up * 1.2f, buildingLeaves);
-
+            var entrance = new DoorPair("ARCADE ENTRANCE", buildingDoorCenter + Vector3.up * 1.2f, buildingLeaves, inward);
             var roomLeaves = new List<Leaf>
             {
-                Leaf.ForHinge(hingeA, roomDoorCenter, -inward, 90f),
-                Leaf.ForHinge(hingeB, roomDoorCenter, -inward, 90f)
+                Leaf.ForHinge(hingeA),
+                Leaf.ForHinge(hingeB)
             };
-            var room = new DoorPair("ARCADE DOOR", roomDoorCenter + Vector3.up * 1.2f, roomLeaves);
+            var room = new DoorPair("ARCADE DOOR", roomDoorCenter + Vector3.up * 1.2f, roomLeaves, inward);
             _doors.Add(entrance);
             _doors.Add(room);
+            foreach (DoorPair pair in _doors)
+                pair.Native = CreateNativeInteraction(pair, along, Mathf.Max(doorwayHalfWidth, roomDoorHalfWidth) * 2f, staticDoors[0]);
 
             float floorRise = _location.RoomInstance.transform.position.y + 0.043f - buildingDoorCenter.y;
-            BuildVestibule(cornerDoor, buildingDoorCenter, along, inward, depth, Mathf.Max(doorwayHalfWidth, roomDoorHalfWidth) + 0.12f, doorwayHalfWidth, doorwayHeight, floorRise);
+            float panelTop = cornerDoor.GetComponent<BoxCollider>() is BoxCollider panelBox ? panelBox.bounds.max.y : buildingDoorCenter.y + 3.5f;
+            float vestibuleHeight = Mathf.Clamp(panelTop - buildingDoorCenter.y - 0.10f, 2.55f, ArcadeDimensions.InteriorCeilingHeight);
+            BuildVestibule(cornerDoor, buildingDoorCenter, along, inward, depth, Mathf.Max(doorwayHalfWidth, roomDoorHalfWidth) + 0.12f, doorwayHalfWidth, doorwayHeight, floorRise, vestibuleHeight, roomDoorHalfWidth, roomDoor);
 
             CollectInteriorOccluders(building, buildingDoorCenter);
+            MelonLogger.Msg(cloned > 0
+                ? $"Walk-in entrance: {cloned} leaf/leaves cloned from the vanilla '{sourceName}' (PivotDoor glass door model, transparent glass); vestibule {vestibuleHeight:0.00} m high."
+                : $"Walk-in entrance: no unbatched vanilla glass PivotDoor leaf was loaded; built matching glass leaves with {(glass != null ? glass.name : "fallback")} glass.");
 
             _initialized = true;
             MelonLogger.Msg($"Walk-in arcade ready: Arcade glass doors at {buildingDoorCenter} (opening {doorwayHalfWidth * 2f:0.00} m x {doorwayHeight:0.00} m), vestibule {depth:0.00} m deep, room door {roomDoorHalfWidth * 2f:0.00} m wide. No teleport is used.");
@@ -198,12 +213,16 @@ internal sealed class ArcadeWalkInService : IDisposable
 
         float dt = Time.deltaTime;
         _target = null;
+        _playerPosition = position;
         Camera? camera = Camera.main;
         if (camera != null && !_blockingInteraction())
         {
             float bestDot = 0.86f;
             foreach (DoorPair door in _doors)
             {
+                // The native InteractableObject owns the prompt and the E press while it is hovered.
+                if (door.NativeHoveredRecently)
+                    continue;
                 Vector3 toDoor = door.InteractPoint - camera.transform.position;
                 if (Flat(door.InteractPoint - position).magnitude > DoorInteractDistance || toDoor.sqrMagnitude < 0.01f)
                     continue;
@@ -217,12 +236,7 @@ internal sealed class ArcadeWalkInService : IDisposable
         }
 
         if (_target != null && Input.GetKeyDown(KeyCode.E))
-        {
-            // Never swing a closing leaf through the player standing in the doorway.
-            bool inSwing = Flat(_target.InteractPoint - position).magnitude < 1.15f;
-            if (!_target.WantOpen || !inSwing)
-                _target.Toggle();
-        }
+            RequestToggle(_target);
 
         UpdateInteriorOccluders(position);
 
@@ -233,7 +247,10 @@ internal sealed class ArcadeWalkInService : IDisposable
             {
                 door.AwayTimer += dt;
                 if (door.AwayTimer > AutoCloseDelay)
+                {
                     door.WantOpen = false;
+                    door.UpdateNativeMessage();
+                }
             }
             else
             {
@@ -244,14 +261,32 @@ internal sealed class ArcadeWalkInService : IDisposable
         }
     }
 
+    /// <summary>One interaction toggles both leaves; opening swings them away from the player.</summary>
+    private void RequestToggle(DoorPair door)
+    {
+        // Native and fallback input can both see the same E press: one toggle per press.
+        if (Time.frameCount - door.LastToggleFrame <= 1 || _blockingInteraction())
+            return;
+        // Never swing a closing leaf through the player standing in the doorway.
+        bool inSwing = Flat(door.InteractPoint - _playerPosition).magnitude < 1.15f;
+        if (door.WantOpen && inSwing)
+            return;
+        door.LastToggleFrame = Time.frameCount;
+        if (!door.WantOpen)
+            door.ChooseSwingAwayFrom(_playerPosition);
+        door.WantOpen = !door.WantOpen;
+        door.UpdateNativeMessage();
+    }
+
     public void OnGUI()
     {
         if (_target == null || _blockingInteraction())
             return;
 
+        // Fallback prompt only (the native "E  Open" HUD is used whenever it is available).
         ArcadePromptUi.DrawCard(
             _target.Label,
-            _target.WantOpen ? "PRESS [E]  CLOSE DOOR" : "PRESS [E]  OPEN DOOR",
+            _target.WantOpen ? "PRESS [E]  CLOSE" : "PRESS [E]  OPEN",
             _target.WantOpen ? "Doors close by themselves once you walk away." : "Walk in: the arcade is part of the Arcade building.",
             132f,
             new Color(0.95f, 0.35f, 0.38f, 1f));
@@ -396,12 +431,118 @@ internal sealed class ArcadeWalkInService : IDisposable
         }
     }
 
+    /// <summary>The game's transparent shop-window glass (render queue >= 3000), never the opaque fake.</summary>
+    private static Material? FindTransparentGlass()
+    {
+        Material? named = GameMaterialLibrary.Find("window_glass_material", "Glass", "glass");
+        if (named != null && named.renderQueue >= 2450 && !named.name.Contains("opaque", StringComparison.OrdinalIgnoreCase))
+            return named;
+        try
+        {
+            foreach (Material m in Resources.FindObjectsOfTypeAll<Material>())
+            {
+                if (m == null || m.shader == null || m.renderQueue < 3000)
+                    continue;
+                string n = m.name;
+                if ((n.Contains("glass", StringComparison.OrdinalIgnoreCase) || n.Contains("window", StringComparison.OrdinalIgnoreCase))
+                    && !n.Contains("opaque", StringComparison.OrdinalIgnoreCase) && !n.StartsWith("ScheduleIArcade", StringComparison.Ordinal))
+                    return m;
+            }
+        }
+        catch
+        {
+        }
+        return named;
+    }
+
     /// <summary>
-    /// Builds a swinging glass-door leaf that occupies exactly the vanilla leaf's collider box:
-    /// metal stiles/rails with the vanilla door's frame material, a glass pane with its glass
-    /// material and a handle on the free edge. Returns the leaf's own collider.
+    /// The leaf ("Door" + handles + glass + collider) of a vanilla "Basic Metal Glass Door" PivotDoor:
+    /// the same door model the Arcade's StaticDoor uses, but unbatched (it animates) and fitted with
+    /// transparent glass and a black frame. The Northtown hardware store's door is preferred.
     /// </summary>
-    private BoxCollider BuildGlassLeaf(BoxCollider source, Transform model, Vector3 doorwayCenter, out Transform root)
+    private static Transform? FindVanillaGlassDoorLeaf(out string sourceName)
+    {
+        sourceName = string.Empty;
+        Transform? best = null;
+        int bestScore = -1;
+        try
+        {
+            foreach (var pivot in UnityEngine.Object.FindObjectsOfType<Il2CppScheduleOne.Doors.PivotDoor>(true))
+            {
+                if (pivot == null || !pivot.gameObject.name.StartsWith("Basic Metal Glass Door", StringComparison.Ordinal))
+                    continue;
+                Transform container = pivot.DoorTransform != null ? pivot.DoorTransform : pivot.transform;
+                Transform? leaf = container.Find("Door");
+                MeshFilter? filter = leaf != null ? leaf.GetComponent<MeshFilter>() : null;
+                MeshRenderer? renderer = leaf != null ? leaf.GetComponent<MeshRenderer>() : null;
+                if (leaf == null || filter == null || filter.sharedMesh == null || renderer == null)
+                    continue;
+                if (renderer.isPartOfStaticBatch || filter.sharedMesh.name.StartsWith("Combined Mesh", StringComparison.Ordinal))
+                    continue;
+                string path = pivot.transform.parent != null ? pivot.transform.parent.name : string.Empty;
+                int score = 1;
+                if (path.Contains("hardware", StringComparison.OrdinalIgnoreCase)) score += 4;
+                Material? frame = renderer.sharedMaterial;
+                if (frame != null && frame.name.Contains("black", StringComparison.OrdinalIgnoreCase)) score += 2;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = leaf;
+                    sourceName = pivot.gameObject.name + (path.Length > 0 ? " (" + path + ")" : string.Empty);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"Walk-in entrance: could not search vanilla PivotDoors: {ex.Message}");
+        }
+        return best;
+    }
+
+    /// <summary>Clones the vanilla leaf into the exact closed pose of an Arcade door leaf.</summary>
+    private Leaf? CloneGlassLeaf(Transform source, Transform pose, int layer)
+    {
+        try
+        {
+            GameObject clone = UnityEngine.Object.Instantiate(source.gameObject);
+            _created.Add(clone);
+            clone.name = "ARCADE_WALKIN_GLASS_LEAF";
+            clone.transform.SetParent(null, false);
+            clone.transform.position = pose.position;
+            clone.transform.rotation = pose.rotation;
+            clone.transform.localScale = pose.lossyScale;
+            foreach (Transform t in clone.GetComponentsInChildren<Transform>(true))
+                t.gameObject.layer = layer;
+            // Keep only plain colliders and renderers; drop any behaviour that came with the leaf.
+            foreach (MonoBehaviour behaviour in clone.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (behaviour != null)
+                    UnityEngine.Object.Destroy(behaviour);
+            }
+            Collider[] colliders = SolidColliders(clone.transform);
+            if (colliders.Length == 0)
+            {
+                // Same 1.05 x 2.10 x 0.05 leaf box the vanilla door uses (local 2x2x2 at y = +1).
+                var box = clone.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 1f, 0f);
+                box.size = new Vector3(2f, 2f, 2f);
+                colliders = new Collider[] { box };
+            }
+            TryGetBounds(colliders, out Bounds bounds);
+            return new Leaf(clone.transform, bounds, colliders, pose.position);
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"Walk-in entrance: cloning the vanilla glass door leaf failed ({ex.Message}); using the built fallback leaf.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Fallback leaf in the vanilla leaf's exact pose, mimicking the liked shop door: black metal
+    /// stiles/rails, 2 x 3 glass panes in transparent glass and a vertical bar handle.
+    /// </summary>
+    private Leaf BuildFallbackLeaf(BoxCollider source, Transform pose, Transform model, Vector3 doorwayCenter, Material? glassMaterial)
     {
         Transform t = source.transform;
         Vector3 scale = t.lossyScale;
@@ -412,9 +553,8 @@ internal sealed class ArcadeWalkInService : IDisposable
         go.layer = model.gameObject.layer;
         go.transform.position = t.TransformPoint(source.center);
         go.transform.rotation = t.rotation;
-        root = go.transform;
+        Transform root = go.transform;
 
-        // Identify the leaf's thickness / height / width axes in its own local frame.
         int thicknessAxis = 0, upAxis = 0;
         float thinnest = float.MaxValue, mostVertical = -1f;
         for (int axis = 0; axis < 3; axis++)
@@ -429,9 +569,9 @@ internal sealed class ArcadeWalkInService : IDisposable
             thicknessAxis = (upAxis + 1) % 3;
         int widthAxis = 3 - thicknessAxis - upAxis;
 
-        Material frame = MaterialFrom(model, "Door") ?? GameMaterialLibrary.Find("Metal", "Trim") ?? FallbackMaterial(new Color(0.18f, 0.19f, 0.21f, 1f));
-        Material glass = MaterialFrom(model, "Glass") ?? frame;
-        Material handle = MaterialFrom(model, "DoorHandle") ?? frame;
+        Material frame = GameMaterialLibrary.Find("postoffice_blacktrim_mat", "gas station black mat") ?? MaterialFrom(model, "Door") ?? FallbackMaterial(new Color(0.03f, 0.03f, 0.035f, 1f));
+        Material glass = glassMaterial ?? FallbackMaterial(new Color(0.55f, 0.65f, 0.7f, 1f));
+        Material handle = GameMaterialLibrary.Find("metal_mediumgrey_mat") ?? MaterialFrom(model, "DoorHandle") ?? frame;
 
         float width = extents[widthAxis], height = extents[upAxis], depth = Mathf.Max(0.03f, extents[thicknessAxis]);
         Vector3 Vec(float w, float h, float d)
@@ -442,24 +582,130 @@ internal sealed class ArcadeWalkInService : IDisposable
             v[thicknessAxis] = d;
             return v;
         }
-        const float stile = 0.07f, topRail = 0.09f, bottomRail = 0.20f;
+        const float stile = 0.07f, topRail = 0.09f, bottomRail = 0.20f, bar = 0.035f;
         LeafPiece(root, "Stile_A", Vec(-width * 0.5f + stile * 0.5f, 0f, 0f), Vec(stile, height, depth), frame);
         LeafPiece(root, "Stile_B", Vec(width * 0.5f - stile * 0.5f, 0f, 0f), Vec(stile, height, depth), frame);
         LeafPiece(root, "Rail_Top", Vec(0f, height * 0.5f - topRail * 0.5f, 0f), Vec(width - stile * 2f, topRail, depth), frame);
         LeafPiece(root, "Rail_Bottom", Vec(0f, -height * 0.5f + bottomRail * 0.5f, 0f), Vec(width - stile * 2f, bottomRail, depth), frame);
-        LeafPiece(root, "Glass", Vec(0f, (bottomRail - topRail) * 0.5f, 0f), Vec(width - stile * 2f, height - topRail - bottomRail, depth * 0.35f), glass);
+        float glassHeight = height - topRail - bottomRail;
+        float glassCentre = (bottomRail - topRail) * 0.5f;
+        LeafPiece(root, "Glass", Vec(0f, glassCentre, 0f), Vec(width - stile * 2f, glassHeight, depth * 0.30f), glass);
+        // 2 x 3 panes: one vertical muntin and two horizontal muntins.
+        LeafPiece(root, "Muntin_V", Vec(0f, glassCentre, 0f), Vec(bar, glassHeight, depth * 0.8f), frame);
+        LeafPiece(root, "Muntin_H1", Vec(0f, glassCentre - glassHeight / 6f, 0f), Vec(width - stile * 2f, bar, depth * 0.8f), frame);
+        LeafPiece(root, "Muntin_H2", Vec(0f, glassCentre + glassHeight / 6f, 0f), Vec(width - stile * 2f, bar, depth * 0.8f), frame);
 
-        // Handle on the free edge (the edge nearer the middle of the double door).
         Vector3 edgeA = root.TransformPoint(Vec(-width * 0.5f, 0f, 0f));
         Vector3 edgeB = root.TransformPoint(Vec(width * 0.5f, 0f, 0f));
         float freeSign = Flat(edgeA - doorwayCenter).sqrMagnitude < Flat(edgeB - doorwayCenter).sqrMagnitude ? -1f : 1f;
         float handleY = -height * 0.5f + 1.05f;
-        LeafPiece(root, "Handle_Out", Vec(freeSign * (width * 0.5f - stile - 0.05f), handleY, depth * 0.5f + 0.03f), Vec(0.03f, 0.32f, 0.03f), handle);
-        LeafPiece(root, "Handle_In", Vec(freeSign * (width * 0.5f - stile - 0.05f), handleY, -depth * 0.5f - 0.03f), Vec(0.03f, 0.32f, 0.03f), handle);
+        LeafPiece(root, "Handle_Out", Vec(freeSign * (width * 0.5f - stile - 0.06f), handleY, depth * 0.5f + 0.035f), Vec(0.025f, 0.60f, 0.025f), handle);
+        LeafPiece(root, "Handle_In", Vec(freeSign * (width * 0.5f - stile - 0.06f), handleY, -depth * 0.5f - 0.035f), Vec(0.025f, 0.60f, 0.025f), handle);
 
         BoxCollider collider = go.AddComponent<BoxCollider>();
         collider.size = extents;
-        return collider;
+        return new Leaf(root, collider.bounds, new Collider[] { collider }, pose.position);
+    }
+
+    /// <summary>Swaps the corner panel's opaque fake-window slot (the transom) for real glass.</summary>
+    private void ReplaceOpaqueGlass(Transform cornerDoor, Material? glass)
+    {
+        if (glass == null)
+            return;
+        Renderer? renderer = cornerDoor.GetComponent<Renderer>();
+        if (renderer == null)
+            return;
+        Material[] original = renderer.sharedMaterials;
+        Material[] replaced = renderer.sharedMaterials;
+        int swapped = 0;
+        for (int i = 0; i < replaced.Length; i++)
+        {
+            if (replaced[i] != null && replaced[i].name.Contains("opaque", StringComparison.OrdinalIgnoreCase))
+            {
+                replaced[i] = glass;
+                swapped++;
+            }
+        }
+        if (swapped == 0)
+            return;
+        renderer.sharedMaterials = replaced;
+        _restore.Add(() => { if (renderer != null) renderer.sharedMaterials = original; });
+        MelonLogger.Msg($"Walk-in entrance: transom/storefront glass above the doors now uses '{glass.name}' (see-through).");
+    }
+
+    /// <summary>
+    /// Off-white jambs, head and a centre stop around the leaves: they overlap each leaf edge by a
+    /// couple of centimetres, so no street light shows between leaf and frame.
+    /// </summary>
+    private void BuildEntranceFrame(Vector3 doorCenter, Vector3 along, Vector3 inward, List<Leaf> leaves, float doorwayHeight)
+    {
+        Material frame = GameMaterialLibrary.Find("WindowFrame", "Trim", "metal_mediumlightgrey_mat") ?? FallbackMaterial(new Color(0.86f, 0.85f, 0.80f, 1f));
+        var root = new GameObject("ARCADE_WALKIN_ENTRANCE_FRAME");
+        _created.Add(root);
+        root.transform.position = doorCenter;
+        root.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
+        float half = 0f;
+        foreach (Leaf leaf in leaves)
+            half = Mathf.Max(half, Mathf.Abs(Vector3.Dot(Flat(leaf.Hinge - doorCenter), along)));
+        if (half < 0.3f)
+            half = 1.05f;
+        float alongSign = Vector3.Dot(root.transform.right, along) >= 0f ? 1f : -1f;
+        const float jamb = 0.075f, overlap = 0.02f, depth = 0.22f;
+        float height = doorwayHeight + 0.02f;
+        Piece(root.transform, "Jamb_A", new Vector3(alongSign * -(half + jamb * 0.5f - overlap), height * 0.5f, 0f), new Vector3(jamb, height + jamb, depth), frame, false);
+        Piece(root.transform, "Jamb_B", new Vector3(alongSign * (half + jamb * 0.5f - overlap), height * 0.5f, 0f), new Vector3(jamb, height + jamb, depth), frame, false);
+        Piece(root.transform, "Head", new Vector3(0f, height + jamb * 0.5f - overlap, 0f), new Vector3(half * 2f + jamb * 2f, jamb, depth), frame, false);
+        // Centre stop (astragal) on the street face covers the meeting-edge gap when closed. It is
+        // its own swinging piece on the first leaf's hinge, so it moves exactly with that leaf.
+        if (leaves.Count > 0)
+        {
+            var stop = new GameObject("ARCADE_WALKIN_CENTRE_STOP");
+            _created.Add(stop);
+            Vector3 size = new(0.035f, height - 0.04f, 0.012f);
+            stop.transform.position = doorCenter + Vector3.up * (height * 0.5f) - inward * 0.035f;
+            stop.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
+            Mesh mesh = MetricBoxMesh.Create(size, "ScheduleIArcade_EntranceStop");
+            mesh.vertices = ScaleVertices(mesh.vertices, size);
+            mesh.RecalculateBounds();
+            _created.Add(mesh);
+            stop.AddComponent<MeshFilter>().sharedMesh = mesh;
+            stop.AddComponent<MeshRenderer>().sharedMaterial = GameMaterialLibrary.Find("postoffice_blacktrim_mat", "gas station black mat") ?? frame;
+            leaves.Add(new Leaf(stop.transform, new Bounds(stop.transform.position, size), Array.Empty<Collider>(), leaves[0].Hinge));
+        }
+    }
+
+    /// <summary>
+    /// Native Schedule I prompt ("E  Open"/"Close") through the game's own InteractableObject on a
+    /// trigger spanning the doorway. Returns null (custom prompt fallback) if this build rejects it.
+    /// </summary>
+    private NativeDoorInteraction? CreateNativeInteraction(DoorPair pair, Vector3 along, float width, Il2CppScheduleOne.Doors.StaticDoor layerSource)
+    {
+        try
+        {
+            var go = new GameObject("ARCADE_WALKIN_DOOR_INTERACTION_" + pair.Label.Replace(' ', '_'));
+            _created.Add(go);
+            go.SetActive(false);
+            go.layer = layerSource.IntObj != null ? layerSource.IntObj.gameObject.layer : layerSource.gameObject.layer;
+            go.transform.position = pair.InteractPoint - Vector3.up * 0.15f;
+            go.transform.rotation = Quaternion.LookRotation(Vector3.Cross(along, Vector3.up), Vector3.up);
+            var trigger = go.AddComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.size = new Vector3(Mathf.Max(0.8f, width - 0.1f), 2.0f, 0.30f);
+            var intObj = go.AddComponent<Il2CppScheduleOne.Interaction.InteractableObject>();
+            intObj.MaxInteractionRange = DoorInteractDistance + 0.6f;
+            intObj.displayLocationPoint = go.transform;
+            var native = new NativeDoorInteraction(intObj);
+            intObj.onHovered.AddListener((UnityEngine.Events.UnityAction)new Action(() => native.LastHoveredFrame = Time.frameCount));
+            intObj.onInteractStart.AddListener((UnityEngine.Events.UnityAction)new Action(() => RequestToggle(pair)));
+            go.SetActive(true);
+            intObj.SetMessage("Open");
+            return native;
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"Walk-in entrance: native door prompt unavailable ({ex.Message}); using the arcade prompt.");
+            return null;
+        }
     }
 
     private void LeafPiece(Transform parent, string name, Vector3 localCenter, Vector3 size, Material material)
@@ -546,7 +792,7 @@ internal sealed class ArcadeWalkInService : IDisposable
         _restore.Add(() => { if (seal != null) seal.enabled = true; });
     }
 
-    private void BuildVestibule(Transform cornerDoor, Vector3 origin, Vector3 along, Vector3 inward, float depth, float halfWidth, float doorwayHalfWidth, float doorwayHeight, float floorRise)
+    private void BuildVestibule(Transform cornerDoor, Vector3 origin, Vector3 along, Vector3 inward, float depth, float halfWidth, float doorwayHalfWidth, float doorwayHeight, float floorRise, float height, float roomDoorHalfWidth, Transform roomDoor)
     {
         var root = new GameObject("ARCADE_WALKIN_VESTIBULE");
         _created.Add(root);
@@ -554,7 +800,14 @@ internal sealed class ArcadeWalkInService : IDisposable
         root.transform.rotation = Quaternion.LookRotation(inward, Vector3.up);
         // Local axes: +Z = into the arcade, +X = along the building chamfer.
 
-        Material wall = GameMaterialLibrary.Find("Plaster1", "BackRoomWall", "Wall", "Walls1")
+        // Finish the corridor like the arcade interior it leads into (same wall finish as the room's
+        // own chamfer wall), with the game's ceiling, skirting and floor materials.
+        Material? roomWall = null;
+        Transform? roomShellWall = roomDoor.parent != null ? FindDeep(roomDoor.parent, "RawArcade_Wall_Chamfer_BeforeDoor") : null;
+        if (roomShellWall != null && roomShellWall.GetComponent<Renderer>() is Renderer shellRenderer)
+            roomWall = shellRenderer.sharedMaterial;
+        Material wall = roomWall
+            ?? GameMaterialLibrary.Find("Plaster1", "BackRoomWall", "Wall", "Walls1")
             ?? cornerDoor.GetComponent<Renderer>()?.sharedMaterial
             ?? FallbackMaterial(new Color(0.55f, 0.55f, 0.58f, 1f));
         Material ceiling = GameMaterialLibrary.Find("Ceiling") ?? wall;
@@ -563,38 +816,52 @@ internal sealed class ArcadeWalkInService : IDisposable
 
         const float wallThickness = 0.12f;
         float start = 0.04f;
-        float length = depth - start;
-        // Side walls (solid), ceiling (solid) and a gentle ramp from the street floor up to the
-        // arcade room floor (solid) so the CharacterController never meets a ledge.
-        Piece(root.transform, "Vestibule_Wall_Left", new Vector3(-halfWidth - wallThickness * 0.5f, VestibuleHeight * 0.5f, start + length * 0.5f), new Vector3(wallThickness, VestibuleHeight, length), wall, true);
-        Piece(root.transform, "Vestibule_Wall_Right", new Vector3(halfWidth + wallThickness * 0.5f, VestibuleHeight * 0.5f, start + length * 0.5f), new Vector3(wallThickness, VestibuleHeight, length), wall, true);
-        Piece(root.transform, "Vestibule_Ceiling", new Vector3(0f, VestibuleHeight + 0.05f, start + length * 0.5f), new Vector3(halfWidth * 2f + wallThickness * 2f, 0.10f, length), ceiling, true);
+        // Run the side walls 12 cm into the room's chamfer wall so no gap shows at the far end.
+        float length = depth - start + 0.12f;
+        Piece(root.transform, "Vestibule_Wall_Left", new Vector3(-halfWidth - wallThickness * 0.5f, height * 0.5f, start + length * 0.5f), new Vector3(wallThickness, height, length), wall, true);
+        Piece(root.transform, "Vestibule_Wall_Right", new Vector3(halfWidth + wallThickness * 0.5f, height * 0.5f, start + length * 0.5f), new Vector3(wallThickness, height, length), wall, true);
+        Piece(root.transform, "Vestibule_Ceiling", new Vector3(0f, height + 0.05f, start + length * 0.5f), new Vector3(halfWidth * 2f + wallThickness * 2f, 0.10f, length), ceiling, true);
 
         float rampLength = Mathf.Sqrt(depth * depth + floorRise * floorRise);
         float rampAngle = Mathf.Atan2(floorRise, depth) * Mathf.Rad2Deg;
         GameObject ramp = Piece(root.transform, "Vestibule_Floor", new Vector3(0f, floorRise * 0.5f - 0.05f, depth * 0.5f), new Vector3(halfWidth * 2f, 0.10f, rampLength + 0.10f), floor, true);
         ramp.transform.localRotation = Quaternion.Euler(-rampAngle, 0f, 0f);
 
-        // Interior lining of the building's chamfer wall around the opening (visual only: the
-        // replacement stubs/lintel are the collision) so the vestibule reads as a finished room.
+        // Street-side lining around the building opening (visual only: stubs/lintel collide).
         float liningZ = 0.16f;
         float sideWidth = halfWidth - doorwayHalfWidth;
         if (sideWidth > 0.02f)
         {
-            Piece(root.transform, "Vestibule_Lining_Left", new Vector3(-(doorwayHalfWidth + sideWidth * 0.5f), VestibuleHeight * 0.5f, liningZ), new Vector3(sideWidth, VestibuleHeight, 0.03f), wall, false);
-            Piece(root.transform, "Vestibule_Lining_Right", new Vector3(doorwayHalfWidth + sideWidth * 0.5f, VestibuleHeight * 0.5f, liningZ), new Vector3(sideWidth, VestibuleHeight, 0.03f), wall, false);
+            Piece(root.transform, "Vestibule_Lining_Left", new Vector3(-(doorwayHalfWidth + sideWidth * 0.5f), height * 0.5f, liningZ), new Vector3(sideWidth, height, 0.03f), wall, false);
+            Piece(root.transform, "Vestibule_Lining_Right", new Vector3(doorwayHalfWidth + sideWidth * 0.5f, height * 0.5f, liningZ), new Vector3(sideWidth, height, 0.03f), wall, false);
         }
-        if (VestibuleHeight - doorwayHeight > 0.02f)
-            Piece(root.transform, "Vestibule_Lining_Lintel", new Vector3(0f, (doorwayHeight + VestibuleHeight) * 0.5f, liningZ), new Vector3(doorwayHalfWidth * 2f, VestibuleHeight - doorwayHeight, 0.03f), wall, false);
+        if (height - doorwayHeight > 0.02f)
+            Piece(root.transform, "Vestibule_Lining_Lintel", new Vector3(0f, (doorwayHeight + height) * 0.5f, liningZ), new Vector3(doorwayHalfWidth * 2f, height - doorwayHeight, 0.03f), wall, false);
+
+        // Room-side lining: closes the strips between the room door frame and the corridor walls
+        // and the band above the room door, flush with the room's chamfer wall face.
+        float frameHalf = roomDoorHalfWidth + 0.105f;
+        float endZ = depth - 0.115f;
+        float roomFloor = floorRise;
+        float endSide = halfWidth - frameHalf;
+        if (endSide > 0.01f)
+        {
+            Piece(root.transform, "Vestibule_End_Left", new Vector3(-(frameHalf + endSide * 0.5f), roomFloor + (height - roomFloor) * 0.5f, endZ), new Vector3(endSide, height - roomFloor, 0.03f), wall, false);
+            Piece(root.transform, "Vestibule_End_Right", new Vector3(frameHalf + endSide * 0.5f, roomFloor + (height - roomFloor) * 0.5f, endZ), new Vector3(endSide, height - roomFloor, 0.03f), wall, false);
+        }
+        float roomDoorTop = roomFloor + 2.18f + 0.15f;
+        if (height - roomDoorTop > 0.02f)
+            Piece(root.transform, "Vestibule_End_Header", new Vector3(0f, (roomDoorTop + height) * 0.5f, endZ), new Vector3(halfWidth * 2f, height - roomDoorTop, 0.03f), wall, false);
+
         Piece(root.transform, "Vestibule_Skirting_Left", new Vector3(-halfWidth + 0.015f, 0.06f + floorRise * 0.5f, start + length * 0.5f), new Vector3(0.03f, 0.12f, length), trim, false);
         Piece(root.transform, "Vestibule_Skirting_Right", new Vector3(halfWidth - 0.015f, 0.06f + floorRise * 0.5f, start + length * 0.5f), new Vector3(0.03f, 0.12f, length), trim, false);
 
         var lightGo = new GameObject("Vestibule_Light");
         lightGo.transform.SetParent(root.transform, false);
-        lightGo.transform.localPosition = new Vector3(0f, VestibuleHeight - 0.25f, depth * 0.5f);
+        lightGo.transform.localPosition = new Vector3(0f, height - 0.30f, depth * 0.5f);
         Light light = lightGo.AddComponent<Light>();
         light.type = LightType.Point;
-        light.range = 3.4f;
+        light.range = 3.8f;
         light.intensity = 1.4f;
         light.color = new Color(1f, 0.9f, 0.78f, 1f);
         light.shadows = LightShadows.None;
@@ -728,24 +995,53 @@ internal sealed class ArcadeWalkInService : IDisposable
         return null;
     }
 
+    private sealed class NativeDoorInteraction
+    {
+        public NativeDoorInteraction(Il2CppScheduleOne.Interaction.InteractableObject interactable)
+        {
+            Interactable = interactable;
+        }
+
+        public Il2CppScheduleOne.Interaction.InteractableObject Interactable { get; }
+        public int LastHoveredFrame { get; set; } = -1000;
+    }
+
     private sealed class DoorPair
     {
         private readonly List<Leaf> _leaves;
+        private readonly Vector3 _throughAxis;
 
-        public DoorPair(string label, Vector3 interactPoint, List<Leaf> leaves)
+        public DoorPair(string label, Vector3 interactPoint, List<Leaf> leaves, Vector3 throughAxis)
         {
             Label = label;
             InteractPoint = interactPoint;
             _leaves = leaves;
+            _throughAxis = Flat(throughAxis).normalized;
         }
 
         public string Label { get; }
         public Vector3 InteractPoint { get; }
         public bool WantOpen { get; set; }
         public float AwayTimer { get; set; }
+        public int LastToggleFrame { get; set; } = -1000;
+        public NativeDoorInteraction? Native { get; set; }
+        public bool NativeHoveredRecently => Native != null && Time.frameCount - Native.LastHoveredFrame <= 2;
         private float _open;
 
-        public void Toggle() => WantOpen = !WantOpen;
+        /// <summary>Both leaves open away from the player (into the side the player is not on).</summary>
+        public void ChooseSwingAwayFrom(Vector3 player)
+        {
+            float side = Vector3.Dot(Flat(player - InteractPoint), _throughAxis);
+            Vector3 away = side <= 0f ? _throughAxis : -_throughAxis;
+            foreach (Leaf leaf in _leaves)
+                leaf.SetSwingSide(away, 88f);
+        }
+
+        public void UpdateNativeMessage()
+        {
+            try { Native?.Interactable.SetMessage(WantOpen ? "Close" : "Open"); }
+            catch { }
+        }
 
         public void Animate(float step)
         {
@@ -754,7 +1050,7 @@ internal sealed class ArcadeWalkInService : IDisposable
                 return;
             _open = Mathf.MoveTowards(_open, target, step);
             // Leaves are non-solid only while swinging so a moving leaf never shoves through the
-            // player; fully open or closed they collide normally.
+            // player; fully open or closed they collide normally (their colliders move with them).
             bool moving = _open > 0.001f && _open < 0.999f;
             float eased = _open * _open * (3f - 2f * _open);
             foreach (Leaf leaf in _leaves)
@@ -777,45 +1073,35 @@ internal sealed class ArcadeWalkInService : IDisposable
         private readonly Quaternion _localRotation;
         private readonly Collider[] _colliders;
         private readonly Bounds _closedBounds;
-        private Vector3 _hinge;
-        private float _angle;
+        private readonly Vector3 _hinge;
+        private float _angle = 88f;
 
-        public Leaf(Transform target, Bounds closedBounds, Collider[] colliders)
+        public Leaf(Transform target, Bounds closedBounds, Collider[] colliders, Vector3 hinge)
         {
             _target = target;
             _localPosition = target.localPosition;
             _localRotation = target.localRotation;
             _closedBounds = closedBounds;
             _colliders = colliders;
-            _hinge = target.position;
+            _hinge = hinge;
         }
 
-        public static Leaf ForHinge(Transform hinge, Vector3 doorCenter, Vector3 swingSide, float degrees)
+        public Transform Target => _target;
+        public Vector3 Hinge => _hinge;
+
+        /// <summary>A room-door leaf: its transform IS the hinge pivot at the frame edge.</summary>
+        public static Leaf ForHinge(Transform hinge)
         {
             Collider[] colliders = SolidColliders(hinge);
             TryGetBounds(colliders, out Bounds bounds);
-            var leaf = new Leaf(hinge, bounds, colliders);
-            leaf._hinge = hinge.position;
-            leaf._angle = ChooseSign(hinge.position, bounds.center, swingSide, degrees);
-            return leaf;
+            return new Leaf(hinge, bounds, colliders, hinge.position);
         }
 
-        /// <summary>For a vanilla door leaf: hinge at the leaf end farthest from the doorway
-        /// centre, swinging towards <paramref name="swingSide"/>.</summary>
-        public void ConfigureSwing(Vector3 doorwayCenter, Vector3 along, Vector3 swingSide, float degrees)
+        public void SetSwingSide(Vector3 swingSide, float degrees)
         {
-            Vector3 c = _closedBounds.center;
-            float sign = Mathf.Sign(Vector3.Dot(Flat(c - doorwayCenter), along));
-            float halfSpan = HalfExtentAlong(_closedBounds, along, new Vector3(c.x, doorwayCenter.y, c.z));
-            _hinge = new Vector3(c.x, doorwayCenter.y, c.z) + along * (sign * halfSpan);
-            _angle = ChooseSign(_hinge, c, swingSide, degrees);
-        }
-
-        private static float ChooseSign(Vector3 hinge, Vector3 leafCenter, Vector3 swingSide, float degrees)
-        {
-            Vector3 arm = Flat(leafCenter - hinge);
+            Vector3 arm = Flat(_closedBounds.center - _hinge);
             Vector3 positive = Quaternion.AngleAxis(degrees, Vector3.up) * arm;
-            return Vector3.Dot(positive, swingSide) >= 0f ? degrees : -degrees;
+            _angle = Vector3.Dot(positive, swingSide) >= 0f ? degrees : -degrees;
         }
 
         public void Apply(float fraction, bool solid)

@@ -2,6 +2,7 @@ using MelonLoader;
 using Il2CppScheduleOne.Money;
 using ScheduleIArcade.Configuration;
 using ScheduleIArcade.Games;
+using ScheduleIArcade.Games.AirHockey;
 using ScheduleIArcade.Models;
 using UnityEngine;
 
@@ -82,9 +83,18 @@ internal sealed class ArcadeSessionService : IDisposable
 
             if (game is EmbeddedDoomArcadeGame doomCabinet)
                 doomCabinet.AttachAudio(cabinet.ScreenRenderer.transform, _preferences);
+            if (game is SpaceCadetPinballGame pinballCabinet)
+                pinballCabinet.AttachAudio(cabinet.ScreenRenderer.transform, _preferences);
+            if (game is AirHockeyGame airHockey)
+                airHockey.AttachAudio(cabinet.ScreenRenderer.transform, _preferences);
 
-            money.ChangeCashBalance(-PlayPrice, visualizeChange: true, playCashSound: true);
-            paymentTaken = true;
+            // Two-player tables charge only once both sides are occupied and the match starts
+            // (see Tick); opening the table and waiting for player 2 is free.
+            if (game is not IDeferredChargeGame)
+            {
+                money.ChangeCashBalance(-PlayPrice, visualizeChange: true, playCashSound: true);
+                paymentTaken = true;
+            }
             _screenMaterial = cabinet.ScreenRenderer.material;
             CaptureOriginalScreen(_screenMaterial);
             ApplyTexture(_screenMaterial, game.ScreenTexture);
@@ -96,9 +106,12 @@ internal sealed class ArcadeSessionService : IDisposable
                 cabinet.Id.Equals("PACMAN", StringComparison.OrdinalIgnoreCase) ||
                 cabinet.GameId.Equals("doom1", StringComparison.OrdinalIgnoreCase) ||
                 cabinet.GameId.Equals("doom2", StringComparison.OrdinalIgnoreCase) ||
-                cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase))
+                cabinet.GameId.Equals("space_cadet_pinball", StringComparison.OrdinalIgnoreCase) ||
+                cabinet.GameId.Equals("air_hockey", StringComparison.OrdinalIgnoreCase))
                 _tvView.Enter(cabinet);
-            MelonLogger.Msg($"Started {game.DisplayName} on cabinet {cabinet.Id} after a ${PlayPrice:0.00} cash payment.");
+            MelonLogger.Msg(paymentTaken
+                ? $"Started {game.DisplayName} on cabinet {cabinet.Id} after a ${PlayPrice:0.00} cash payment."
+                : $"Opened {game.DisplayName} on cabinet {cabinet.Id}; ${PlayPrice:0.00} is charged only when the match starts.");
             return true;
         }
         catch (Exception ex)
@@ -136,6 +149,8 @@ internal sealed class ArcadeSessionService : IDisposable
 
         _tvView.Tick();
         _activeGame.Tick(deltaTime);
+        if (_activeGame is IDeferredChargeGame deferred && deferred.ReadyToCharge && !deferred.Charged)
+            ChargeDeferred(deferred);
         if (_activeGame is EmbeddedDoomArcadeGame quitDoom && quitDoom.QuitRequested)
         {
             MelonLogger.Msg($"{quitDoom.DisplayName}: player quit from the Doom menu.");
@@ -158,6 +173,25 @@ internal sealed class ArcadeSessionService : IDisposable
 
         if (Input.GetKeyDown(KeyCode.Escape))
             Stop();
+    }
+
+    private void ChargeDeferred(IDeferredChargeGame game)
+    {
+        MoneyManager? money = MoneyManager.Instance;
+        if (money == null)
+        {
+            game.ChargeRejected("CASH SYSTEM NOT READY");
+            return;
+        }
+        float cash = money.cashBalance;
+        if (cash + 0.001f < PlayPrice)
+        {
+            game.ChargeRejected($"NOT ENOUGH CASH ${cash:0.00}");
+            return;
+        }
+        money.ChangeCashBalance(-PlayPrice, visualizeChange: true, playCashSound: true);
+        game.ChargeAccepted();
+        MelonLogger.Msg($"{_activeGame?.DisplayName}: both sides joined; match started after a ${PlayPrice:0.00} cash payment.");
     }
 
     public void Stop()

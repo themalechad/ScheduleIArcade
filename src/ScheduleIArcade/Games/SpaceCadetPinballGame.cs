@@ -1,4 +1,6 @@
+using ScheduleIArcade.Configuration;
 using ScheduleIArcade.Games.Pinball;
+using ScheduleIArcade.Utils;
 using UnityEngine;
 
 namespace ScheduleIArcade.Games;
@@ -20,6 +22,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
     private float _nextDraw;
     private float _bannerTime;
     private string _banner = string.Empty;
+    private ProceduralCabinetAudio? _audio;
+    private const int SoundGateCapture = 0, SoundGateEject = 1, SoundExtraBall = 2;
 
     public string Id => "space_cadet_pinball";
     public string DisplayName => "Space Cadet Pinball";
@@ -45,6 +49,13 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
     {
         if (_sim.GameOver)
             _sim.ResetGame();
+    }
+
+    public void AttachAudio(Transform speaker, ArcadePreferences preferences)
+    {
+        _audio?.Dispose();
+        _audio = new ProceduralCabinetAudio(speaker, preferences, "Pinball",
+            (0.30f, 420f, 9f), (0.12f, 900f, 30f), (0.45f, 1320f, 6f));
     }
 
     public void Tick(float deltaTime)
@@ -78,6 +89,16 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
                 ShowBanner("MULTIPLIER X" + _sim.Multiplier);
             else if (e.Kind == PinballEventKind.Drain && !_sim.GameOver && _sim.BallSaver <= 0f)
                 ShowBanner("BALL LOST");
+            else if (e.Kind == PinballEventKind.StarGateCapture)
+                _audio?.Play(SoundGateCapture, 0.8f);
+            else if (e.Kind == PinballEventKind.ExtraBall)
+            {
+                ShowBanner("EXTRA BALL  +" + PinballSimulation.StarGateBonus);
+                _bannerTime = 2.4f;
+                _audio?.Play(SoundExtraBall, 0.9f);
+            }
+            else if (e.Kind == PinballEventKind.StarGateEject)
+                _audio?.Play(SoundGateEject, 0.7f);
         }
 
         _bannerTime = Mathf.Max(0f, _bannerTime - deltaTime);
@@ -93,6 +114,8 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
 
     public void Dispose()
     {
+        _audio?.Dispose();
+        _audio = null;
         if (_texture != null)
         {
             UnityEngine.Object.Destroy(_texture);
@@ -147,7 +170,18 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
             Fill(30, y, 2, 2, i % 2 == 0 ? new Color32(255, 93, 175, 255) : new Color32(86, 231, 255, 255));
             Fill(262, y, 2, 2, i % 2 == 0 ? new Color32(86, 231, 255, 255) : new Color32(255, 93, 175, 255));
         }
-        DrawTextCentered("STAR GATE", 436, 1, new Color32(255, 226, 96, 255));
+        // STAR GATE saucer drawn exactly at its capture zone, label split around it.
+        bool lit = _sim.StarGateLit;
+        bool holding = _sim.StarGateHolding;
+        bool pulse = ((int)(Time.unscaledTime * 8f) & 1) == 0;
+        Vector2 gate = new(PinballSimulation.StarGateX, PinballSimulation.StarGateY);
+        int gateRadius = Mathf.RoundToInt(PinballSimulation.StarGateCaptureRadius);
+        Circle(gate, gateRadius + 2, holding && pulse ? new Color32(255, 255, 210, 255) : new Color32(14, 34, 96, 255));
+        Ring(gate, gateRadius + 2, 2, lit || holding ? (pulse ? new Color32(120, 220, 255, 255) : new Color32(46, 120, 255, 255)) : new Color32(40, 64, 120, 255));
+        Circle(gate, gateRadius - 3, new Color32(4, 8, 30, 255));
+        Color32 label = lit || holding ? new Color32(255, 226, 96, 255) : new Color32(120, 110, 70, 255);
+        DrawText("STAR", (int)PinballSimulation.StarGateX - gateRadius - 4 - TextWidth("STAR", 1), 433, 1, label);
+        DrawText("GATE", (int)PinballSimulation.StarGateX + gateRadius + 5, 433, 1, label);
         DrawText("FIRE", (int)PinballSimulation.LaneLeft + 3, 30, 1, new Color32(230, 246, 255, 255));
     }
 
@@ -244,7 +278,11 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         if (_sim.WaitingToLaunch)
             DrawTextCentered("SPACE LAUNCH", 220, 1, new Color32(255, 230, 105, 255));
         if (_bannerTime > 0f && !_sim.GameOver)
+        {
+            int bannerWidth = TextWidth(_banner, 1) + 12;
+            Fill((Width - bannerWidth) / 2, 231, bannerWidth, 17, new Color32(4, 8, 30, 220));
             DrawTextCentered(_banner, 236, 1, new Color32(255, 255, 255, 255));
+        }
         if (_sim.GameOver)
         {
             Fill(49, 208, 222, 48, new Color32(2, 3, 14, 245));
@@ -340,27 +378,5 @@ internal sealed class SpaceCadetPinballGame : IArcadeGame
         }
     }
 
-    private static string Glyph(char character) => character switch
-    {
-        'A' => "01110100011000111111100011000110001", 'B' => "11110100011000111110100011000111110",
-        'C' => "01111100001000010000100001000001111", 'D' => "11110100011000110001100011000111110",
-        'E' => "11111100001111010000100001000011111", 'F' => "11111100001111010000100001000010000",
-        'G' => "01111100001000010111100011000101111", 'H' => "10001100011000111111100011000110001",
-        'I' => "11111001000010000100001000010011111", 'J' => "00111000100001000010000101001001100",
-        'K' => "10001100101010011000101001001010001", 'L' => "10000100001000010000100001000011111",
-        'M' => "10001110111010110101100011000110001", 'N' => "10001110011010110101100111000110001",
-        'O' => "01110100011000110001100011000101110", 'P' => "11110100011000111110100001000010000",
-        'Q' => "01110100011000110001101011001001101", 'R' => "11110100011000111110101001001010001",
-        'S' => "01111100000111000001000011111011110", 'T' => "11111001000010000100001000010000100",
-        'U' => "10001100011000110001100011000101110", 'V' => "10001100011000110001100010101000100",
-        'W' => "10001100011000110101101011010101010", 'X' => "10001010100010000100001000101010001",
-        'Y' => "10001100010101000100001000010000100", 'Z' => "11111000010001000100010001000011111",
-        '0' => "01110100011001110101110011000101110", '1' => "00100011000010000100001000010001110",
-        '2' => "01110100010000100010001000100011111", '3' => "11110000010000101110000010000111110",
-        '4' => "00010001100101010010111110001000010", '5' => "11111100001111000001000011000101110",
-        '6' => "00110010001000011110100011000101110", '7' => "11111000010001000100010000100001000",
-        '8' => "01110100011000101110100011000101110", '9' => "01110100011000101111000010000101100",
-        '/' => "00001000100010000100010001000010000", ' ' => "00000000000000000000000000000000000",
-        _ => "00000000000000000000000000000000000"
-    };
+    private static string Glyph(char character) => ScheduleIArcade.Utils.PixelFont.Glyph(character);
 }
