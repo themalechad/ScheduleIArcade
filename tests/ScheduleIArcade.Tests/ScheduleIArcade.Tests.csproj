@@ -13,6 +13,8 @@
     <Compile Include="..\..\src\ScheduleIArcade\Games\Pinball\PinballSimulation.cs" Link="Shared\PinballSimulation.cs" />
     <Compile Include="..\..\src\ScheduleIArcade\Utils\ArcadeAudioMath.cs" Link="Shared\ArcadeAudioMath.cs" />
     <Compile Include="..\..\src\ScheduleIArcade\Utils\ModFiles.cs" Link="Shared\ModFiles.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\GlbMeshParser.cs" Link="Shared\GlbMeshParser.cs" />
+    <Compile Include="..\..\src\ScheduleIArcade\Utils\LocalAssetManifest.cs" Link="Shared\LocalAssetManifest.cs" />
     <Compile Include="..\..\src\ScheduleIArcade\Games\Pacman\PacmanGhostAi.cs" Link="Shared\PacmanGhostAi.cs" />
     <Compile Include="..\..\src\ScheduleIArcade\Games\AirHockey\AirHockeySimulation.cs" Link="Shared\AirHockeySimulation.cs" />
   </ItemGroup>

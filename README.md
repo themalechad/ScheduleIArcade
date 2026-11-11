@@ -147,6 +147,13 @@ penetration and machine overlaps and can snap flush to the arcade's straight wal
 - Host Arcade storefront: the building's fake-interior boxes stay hidden; window panes on WindowWall / CornerWindowWall / UpperWindowWall use the game's transparent shop-window glass so you can see into the arcade from the street. Stray vanilla leftovers that poke into the interior (including the side Industrial Metal Door, pipes, and leftover chairs or stools) are hidden only inside the room bounds.
 - This fork's 0.4.1 package: https://github.com/themalechad/ScheduleIArcade/releases/tag/v0.4.1-doom-audio
 
+## 0.5.0 changes
+
+- Optional personal `LocalAssets` pack: if `Mods/ScheduleIArcade/LocalAssets/manifest.json` is present, the mod can load PNG textures and GLB meshes for doors, storefront frames, ceiling/floor/wall finishes, lights, fans and furniture that could not be resolved from the live game scene. Runtime cloning of vanilla objects is still tried first. The folder is ignored when it is absent, so the public ZIP works without it.
+- `Tools/Build-LocalAssetPack.ps1` builds a curated pack from a local AssetRipper export into `Build/LocalAssets` (gitignored). `Tools/Package-Private.ps1` wraps that pack into a private ZIP that is never uploaded.
+- This fork's 0.5.0 public package (no ripped assets): https://github.com/themalechad/ScheduleIArcade/releases/tag/v0.5.0
+
+
 ## Installation
 
 ### Requirements

@@ -1,6 +1,7 @@
 using MelonLoader;
 using ScheduleIArcade.Configuration;
 using ScheduleIArcade.Games;
+using ScheduleIArcade.Utils;
 using UnityEngine;
 
 namespace ScheduleIArcade.Services;
@@ -50,6 +51,8 @@ internal sealed class ArcadeRuntime : IDisposable
 
         _cabinets.Scan(_location.RoomInstance);
         LogDoomDependencies();
+
+        LocalAssetPack.Initialize();
 
         _dressing = new ArcadeInteriorDressingService();
         try { _dressing.Apply(_location.RoomInstance, _location.UsingRawScene); }
@@ -115,6 +118,7 @@ internal sealed class ArcadeRuntime : IDisposable
         _customAssets?.Dispose();
         _walkIn?.Dispose();
         _dressing?.Dispose();
+        LocalAssetPack.Reset();
         _buildPlacementHooks?.Dispose();
         _buildSurfaces?.Dispose();
         _ambience?.Dispose();

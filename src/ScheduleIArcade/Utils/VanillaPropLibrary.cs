@@ -96,6 +96,10 @@ internal static class VanillaPropLibrary
                 return true;
             }
         }
+        // Live scene missed (nothing unbatched, or the name is not loaded): try the optional
+        // personal LocalAssets pack. This is a no-op when the folder is absent.
+        if (LocalAssetPack.TryGetVisual(names, out source, out parts, out matchedName))
+            return true;
         source = null;
         parts = null;
         matchedName = string.Empty;

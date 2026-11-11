@@ -20,3 +20,12 @@ ScheduleIArcade-claude-*.log
 # Freedoom / Doom IWADs are fetched by Tools/Fetch-Freedoom.ps1; never commit WADs (>25 MB each).
 *.wad
 *.WAD
+
+# Optional personal local asset pack (ripped game files). Never commit these, and never
+# ship them in the public ZIP. Build-LocalAssetPack.ps1 writes Build/LocalAssets;
+# Package-Private.ps1 writes Build/Private.
+LocalAssets/
+**/LocalAssets/
+Build/LocalAssets/
+Build/Private/
+dist/Mods/ScheduleIArcade/LocalAssets/

@@ -26,6 +26,11 @@ internal static class ModPaths
     /// <summary>Bundled Doom engine (separate GPL-2.0 assembly), Freedoom IWADs and licences.</summary>
     public static string DoomRoot => Path.Combine(ModRoot, "Doom");
     public static string DoomEnginePath => Path.Combine(DoomRoot, "ScheduleIArcade.Doom.dll");
+    /// <summary>
+    /// Optional personal asset pack (PNG + GLB) used only when live vanilla objects/materials
+    /// cannot be resolved. Never shipped in the public ZIP; ignored when the folder is absent.
+    /// </summary>
+    public static string LocalAssetsRoot => Path.Combine(ModRoot, "LocalAssets");
     /// <summary>Doom save games/config live under UserData, never next to the game executable.</summary>
     public static string DoomDataRoot => Path.Combine(MelonEnvironment.UserDataDirectory, Constants.ModFolderName, "Doom");
 

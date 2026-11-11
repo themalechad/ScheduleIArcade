@@ -28,6 +28,11 @@ var tests = new (string Name, Action Body)[]
     ("air hockey goals, serve and first-to-7", AirHockeyTests.GoalsAndMatch),
     ("air hockey long random play invariants", AirHockeyTests.RandomPlayInvariants),
     ("Vortex symlinked WAD is accepted (FileInfo.Length == 0)", SymlinkTests.VortexSymlinkedWadIsAccepted),
+    ("local pack GLB parser reads a synthetic triangle and converts axes", LocalAssetTests.ParsesSyntheticGlbTriangle),
+    ("local pack GLB parser rejects garbage", LocalAssetTests.RejectsGarbageBytes),
+    ("local pack manifest parses names, aliases and transparent flag", LocalAssetTests.ParsesManifestAndLooksUpNames),
+    ("local pack manifest is graceful on bad JSON", LocalAssetTests.ManifestIsGracefulOnBadJson),
+    ("repository public tree has no ripped LocalAssets files", LocalAssetTests.RepoHasNoRippedLocalAssets),
 };
 
 int failed = 0;

@@ -26,7 +26,8 @@ internal static class GameMaterialLibrary
             if (_byName!.TryGetValue(name, out Material? material) && material != null)
                 return material;
         }
-        return null;
+        // Live scene missed: optional personal pack (no-op when LocalAssets is absent).
+        return LocalAssetPack.TryCreateMaterial(names);
     }
 
     private static void EnsureIndex()
